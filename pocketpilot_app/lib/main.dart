@@ -10,6 +10,7 @@ import 'screens/onboarding/budget_setup.dart';
 import 'screens/onboarding/autopay_setup.dart';
 import 'screens/onboarding/sms_permission.dart';
 import 'screens/transactions.dart';
+import 'services/notification_service.dart';
 import 'screens/autopays.dart';
 import 'screens/settings.dart';
 import 'services/auth_service.dart';
@@ -25,7 +26,7 @@ import 'services/storage_service.dart';
 void main() async {
 
   WidgetsFlutterBinding.ensureInitialized();
-
+  await NotificationService.init();
   await Firebase.initializeApp(
 
     options: DefaultFirebaseOptions.currentPlatform,

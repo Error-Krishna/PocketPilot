@@ -1,6 +1,6 @@
-// lib/services/sms_parser_service.dart
 import 'package:telephony/telephony.dart';
 import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ParsedTransaction {
   final double amount;
@@ -22,9 +22,6 @@ class ParsedTransaction {
 }
 
 class SmsParserService {
-  // ---------------------------------------------------------------------------
-  // Singleton factory
-  // ---------------------------------------------------------------------------
   static SmsParserService? _instance;
 
   factory SmsParserService({Telephony? telephony}) {
@@ -36,10 +33,6 @@ class SmsParserService {
       : _telephony = telephony ?? Telephony.instance;
 
   final Telephony _telephony;
-
-  // ---------------------------------------------------------------------------
-  // Instance state (was static before)
-  // ---------------------------------------------------------------------------
   bool _listenerStarted = false;
   static const int _maxFingerprintCacheSize = 2000;
   final Set<String> _processedFingerprints = <String>{};
@@ -50,8 +43,25 @@ class SmsParserService {
   Stream<ParsedTransaction> get parsedTransactions =>
       _parsedTransactionsController.stream;
 
+  // Persistence keys
+  static const String _fingerprintsKey = 'sms_fingerprints';
+  static const String _lastSyncKey = 'sms_last_sync';
+
   // ---------------------------------------------------------------------------
-  // SMS classification config (updated skips)
+  // Singleton lifecycle
+  // ---------------------------------------------------------------------------
+  Future<void> init() async {
+    await _loadFingerprints();
+    // last sync timestamp is read on demand in syncInbox()
+  }
+
+  void dispose() {
+    _parsedTransactionsController.close();
+    _instance = null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // SMS classification (one unified list)
   // ---------------------------------------------------------------------------
   static const List<String> _skipKeywords = [
     'otp',
@@ -83,11 +93,9 @@ class SmsParserService {
     'payment',
     'txn',
     'transaction',
-    'dr.', // keep this
-    // 'cr ' removed – not a reliable debit indicator
+    'dr.',
   ];
 
-  // BOB pattern fixed with word boundary after Dr
   static final Map<String, RegExp> _bankPatterns = {
     'BOB': RegExp(
       r'Rs\.?\s*([\d,]+(?:\.\d{1,2})?)\s*Dr\b',
@@ -138,6 +146,7 @@ class SmsParserService {
   }
 
   Future<int> syncInbox({int limit = 50}) async {
+    final lastSync = await _getLastSyncTimestamp();
     final messages = await _telephony.getInboxSms(
       columns: [SmsColumn.BODY, SmsColumn.DATE],
     );
@@ -145,8 +154,14 @@ class SmsParserService {
     final sorted = messages.toList()
       ..sort((a, b) => (b.date ?? 0).compareTo(a.date ?? 0));
 
+    // Only process messages newer than lastSync
+    final filtered = sorted.where((msg) {
+      if (msg.date == null) return true;
+      return msg.date! > lastSync;
+    }).toList();
+
     var emitted = 0;
-    for (final message in sorted.take(limit)) {
+    for (final message in filtered.take(limit)) {
       final parsed = parseSms(
         message.body ?? '',
         timestamp: message.date != null
@@ -155,6 +170,10 @@ class SmsParserService {
       );
       if (_emitParsed(parsed)) emitted++;
     }
+
+    // Update last sync timestamp to now
+    await _saveLastSync(DateTime.now().millisecondsSinceEpoch);
+
     return emitted;
   }
 
@@ -167,14 +186,38 @@ class SmsParserService {
     final fp = parsed.fingerprint;
     if (_processedFingerprints.contains(fp)) return false;
 
-    // Bounded cache: evict oldest when full
     if (_processedFingerprints.length >= _maxFingerprintCacheSize) {
       _processedFingerprints.remove(_processedFingerprints.first);
     }
 
     _processedFingerprints.add(fp);
     _parsedTransactionsController.add(parsed);
+    _saveFingerprints(); // persist
     return true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Persistence
+  // ---------------------------------------------------------------------------
+  Future<void> _loadFingerprints() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_fingerprintsKey) ?? [];
+    _processedFingerprints.addAll(list);
+  }
+
+  Future<void> _saveFingerprints() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_fingerprintsKey, _processedFingerprints.toList());
+  }
+
+  Future<int> _getLastSyncTimestamp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_lastSyncKey) ?? 0;
+  }
+
+  Future<void> _saveLastSync(int timestamp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_lastSyncKey, timestamp);
   }
 
   // ---------------------------------------------------------------------------
@@ -186,24 +229,8 @@ class SmsParserService {
 
     final lower = normalized.toLowerCase();
 
-    // Hard skips
-    const hardSkips = [
-      'otp',
-      'your account is credited',
-      'credit for',
-      'statement',
-      'mini statement',
-      'emi due',
-      'credit limit',
-      'reward points',
-      'loan',
-      'minimum due',
-      'upcoming mandate',
-      'upi mandate',
-      'for the autopay',
-      'reverse atm',
-    ];
-    if (hardSkips.any((kw) => lower.contains(kw))) return null;
+    // Use the class-level _skipKeywords
+    if (_skipKeywords.any((kw) => lower.contains(kw))) return null;
 
     // Must contain a debit signal
     if (!_debitKeywords.any((kw) => lower.contains(kw))) return null;

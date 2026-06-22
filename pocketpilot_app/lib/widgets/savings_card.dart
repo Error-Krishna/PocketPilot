@@ -10,7 +10,7 @@ class SavingsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: const Color(0xFF22C55E).withOpacity(0.15),
+      color: const Color(0xFF22C55E).withValues(alpha: 0.15),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Row(

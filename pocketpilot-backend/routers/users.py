@@ -63,10 +63,8 @@ async def update_current_user_profile(payload: UserUpdate, current_user: Current
     return success_response(_serialize_user(result))
 
 
-@router.post("/register")
+@router.post("/register", status_code=status.HTTP_201_CREATED)  # added status code
 async def register_user(current_user: CurrentUser):
-    print("REGISTER ENDPOINT HIT")
-    print("UID:", current_user["uid"])
     db = get_database()
     existing = await db.users.find_one({"firebase_uid": current_user["uid"]})
     if existing:

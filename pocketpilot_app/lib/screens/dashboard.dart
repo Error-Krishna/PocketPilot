@@ -12,6 +12,7 @@ import '../models/transaction.dart';
 import '../models/budget_summary.dart';
 import '../models/user.dart';
 import '../services/sms_parser_service.dart';
+import '../services/notification_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -30,6 +31,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _smsParser.init(); // load fingerprints & last sync
     _loadData();
     _startSmsListener();
   }
@@ -124,6 +126,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void dispose() {
     _syncTimer?.cancel();
     _smsSubscription?.cancel();
+    _smsParser.dispose(); // close stream and clear singleton
     super.dispose();
   }
 
@@ -192,6 +195,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             final totalSavings =
                 goals.fold<double>(0.0, (sum, g) => sum + g.currentAmount);
             final goalCount = goals.length;
+            // Show persistent daily limit notification
+            NotificationService.showDailyLimitNotification(
+              dailyLimit: summary.dailyLimit,
+              spentToday: summary.spentToday,
+              savedToday: summary.savedToday,
+            );
 
             return ListView(
               padding: const EdgeInsets.all(16),
@@ -204,7 +213,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 DailyLimitCard(
                   dailyLimit: summary.dailyLimit,
                   savedToday: summary.savedToday,
-                  incomeToday: summary.incomeToday, // <-- FIX: added required param
+                  incomeToday: summary.incomeToday, // required
                 ),
                 const SizedBox(height: 16),
                 SavingsCard(
