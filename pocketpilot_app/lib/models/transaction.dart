@@ -11,6 +11,85 @@ enum TransactionCategory {
   other
 }
 
+/// How a transaction affects the user's monthly spending PLAN.
+/// Orthogonal to [TransactionType] and [TransactionCategory].
+enum TransactionClass {
+  fixedCommitment,
+  discretionary,
+  transferInternal,
+  refund,
+  incomeRegular,
+  oneTimeException,
+  unclassified,
+}
+
+enum ClassificationSource { rule, user, pending }
+
+TransactionClass _transactionClassFromJson(String? value) {
+  switch (value) {
+    case 'fixed_commitment':
+      return TransactionClass.fixedCommitment;
+    case 'transfer_internal':
+      return TransactionClass.transferInternal;
+    case 'refund':
+      return TransactionClass.refund;
+    case 'income_regular':
+      return TransactionClass.incomeRegular;
+    case 'one_time_exception':
+      return TransactionClass.oneTimeException;
+    case 'unclassified':
+      return TransactionClass.unclassified;
+    default:
+      return TransactionClass.discretionary;
+  }
+}
+
+String _transactionClassToJson(TransactionClass value) {
+  switch (value) {
+    case TransactionClass.fixedCommitment:
+      return 'fixed_commitment';
+    case TransactionClass.discretionary:
+      return 'discretionary';
+    case TransactionClass.transferInternal:
+      return 'transfer_internal';
+    case TransactionClass.refund:
+      return 'refund';
+    case TransactionClass.incomeRegular:
+      return 'income_regular';
+    case TransactionClass.oneTimeException:
+      return 'one_time_exception';
+    case TransactionClass.unclassified:
+      return 'unclassified';
+  }
+}
+
+extension TransactionClassLabel on TransactionClass {
+  String get label => switch (this) {
+        TransactionClass.fixedCommitment => 'Fixed commitment',
+        TransactionClass.discretionary => 'Discretionary spend',
+        TransactionClass.transferInternal => 'Internal transfer',
+        TransactionClass.refund => 'Refund',
+        TransactionClass.incomeRegular => 'Income',
+        TransactionClass.oneTimeException => 'One-time exception',
+        TransactionClass.unclassified => 'Needs review',
+      };
+
+  /// Public wire-format serializer, used by ApiService when submitting a
+  /// user's classification decision back to the backend.
+  String get wireValue => _transactionClassToJson(this);
+}
+
+ClassificationSource _classificationSourceFromJson(String? value) {
+  switch (value) {
+    case 'rule':
+      return ClassificationSource.rule;
+    case 'pending':
+      return ClassificationSource.pending;
+    default:
+      return ClassificationSource.user;
+  }
+}
+
 TransactionType _transactionTypeFromJson(String value) =>
     value == 'income' ? TransactionType.income : TransactionType.expense;
 
@@ -77,6 +156,9 @@ class Transaction {
   final DateTime date;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final TransactionClass txnClass;
+  final ClassificationSource classificationSource;
+  final double classificationConfidence;
 
   Transaction({
     required this.id,
@@ -89,7 +171,12 @@ class Transaction {
     required this.date,
     required this.createdAt,
     required this.updatedAt,
+    this.txnClass = TransactionClass.discretionary,
+    this.classificationSource = ClassificationSource.user,
+    this.classificationConfidence = 1.0,
   });
+
+  bool get needsReview => classificationSource == ClassificationSource.pending;
 
   factory Transaction.fromJson(Map<String, dynamic> json) => Transaction(
         id: json['id'],
@@ -102,6 +189,11 @@ class Transaction {
         date: DateTime.parse(json['date']),
         createdAt: DateTime.parse(json['created_at']),
         updatedAt: DateTime.parse(json['updated_at']),
+        txnClass: _transactionClassFromJson(json['txn_class']),
+        classificationSource:
+            _classificationSourceFromJson(json['classification_source']),
+        classificationConfidence:
+            (json['classification_confidence'] as num?)?.toDouble() ?? 1.0,
       );
 }
 

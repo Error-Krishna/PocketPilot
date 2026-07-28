@@ -11,6 +11,7 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 _firebase_initialized = False
 
 
+import json
 import os
 from firebase_admin import exceptions
 
@@ -19,14 +20,26 @@ def init_firebase() -> None:
     if _firebase_initialized:
         return
 
-    cred_path = settings.firebase_credentials_path
-    if not os.path.exists(cred_path):
-        raise FileNotFoundError(f"Firebase credentials file not found at {cred_path}")
-
+    # Prefer credentials supplied via env var (FIREBASE_CREDENTIALS_JSON) so
+    # this works on hosts like Render where committing the service-account
+    # JSON file to the repo isn't appropriate. Falls back to the local file
+    # path for local development, where the JSON file is easy to keep
+    # out of git via .gitignore instead.
+    creds_json = os.environ.get("FIREBASE_CREDENTIALS_JSON")
     try:
-        cred = credentials.Certificate(cred_path)
+        if creds_json:
+            cred_dict = json.loads(creds_json)
+            cred = credentials.Certificate(cred_dict)
+        else:
+            cred_path = settings.firebase_credentials_path
+            if not os.path.exists(cred_path):
+                raise FileNotFoundError(
+                    f"Firebase credentials file not found at {cred_path}, and "
+                    "FIREBASE_CREDENTIALS_JSON env var is not set either."
+                )
+            cred = credentials.Certificate(cred_path)
         firebase_admin.initialize_app(cred)
-    except (ValueError, exceptions.FirebaseError) as e:
+    except (ValueError, exceptions.FirebaseError, json.JSONDecodeError) as e:
         raise RuntimeError(f"Failed to initialize Firebase: {e}") from e
 
     _firebase_initialized = True

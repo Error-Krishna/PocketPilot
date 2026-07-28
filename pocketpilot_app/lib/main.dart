@@ -10,31 +10,24 @@ import 'screens/onboarding/budget_setup.dart';
 import 'screens/onboarding/autopay_setup.dart';
 import 'screens/onboarding/sms_permission.dart';
 import 'screens/transactions.dart';
+import 'screens/review_queue.dart';
+import 'screens/history.dart';
+import 'models/monthly_archive.dart';
 import 'services/notification_service.dart';
 import 'screens/autopays.dart';
 import 'screens/settings.dart';
+import 'screens/savings_goals.dart';
 import 'services/auth_service.dart';
 import 'services/api_service.dart';
 import 'services/storage_service.dart';
 
-// void main() async {
-//   WidgetsFlutterBinding.ensureInitialized();
-//   await Firebase.initializeApp();
-//   runApp(const MyApp());
-// }
-
 void main() async {
-
   WidgetsFlutterBinding.ensureInitialized();
   await NotificationService.init();
   await Firebase.initializeApp(
-
     options: DefaultFirebaseOptions.currentPlatform,
-
   );
-
   runApp(const MyApp());
-
 }
 
 class MyApp extends StatelessWidget {
@@ -104,6 +97,25 @@ class _AppRouterState extends State<_AppRouter> {
         GoRoute(
           path: '/settings',
           builder: (_, __) => const SettingsScreen(),
+        ),
+        GoRoute(
+          path: '/savings',
+          builder: (_, __) => const SavingsGoalsScreen(),
+        ),
+        GoRoute(
+          path: '/review',
+          builder: (_, __) => const ReviewQueueScreen(),
+        ),
+        GoRoute(
+          path: '/history',
+          builder: (_, state) {
+            final extra = state.extra as Map<String, dynamic>?;
+            return HistoryScreen(
+              history:
+                  (extra?['history'] as List<MonthlyArchive>?) ?? const [],
+              lifetimeSavings: (extra?['lifetimeSavings'] as double?) ?? 0,
+            );
+          },
         ),
       ],
     );

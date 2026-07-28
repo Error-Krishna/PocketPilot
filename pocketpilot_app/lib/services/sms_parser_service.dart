@@ -8,9 +8,21 @@ class ParsedTransaction {
   final String source;
   final DateTime timestamp;
   final String rawSms;
+  final bool isCredit;
 
-  String get fingerprint =>
-      rawSms.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+  // Fingerprint used for dedup. Deliberately strips volatile bits (long
+  // digit runs like reference/UTR numbers, and specific clock times) that
+  // commonly differ between a bank's "processing" and "confirmed" SMS for
+  // the very same transaction, or between a resend and the original. What's
+  // left — amount, merchant/VPA, and the surrounding wording — is stable
+  // across those retries while still being distinct enough to tell two
+  // genuinely different transactions apart.
+  String get fingerprint {
+    final normalized = rawSms.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+    return normalized
+        .replaceAll(RegExp(r'\b\d{6,}\b'), '#') // ref/UTR numbers
+        .replaceAll(RegExp(r'\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:am|pm)?\b'), '#'); // clock times
+  }
 
   const ParsedTransaction({
     required this.amount,
@@ -18,6 +30,7 @@ class ParsedTransaction {
     required this.source,
     required this.timestamp,
     required this.rawSms,
+    this.isCredit = false,
   });
 }
 
@@ -65,8 +78,6 @@ class SmsParserService {
   // ---------------------------------------------------------------------------
   static const List<String> _skipKeywords = [
     'otp',
-    'your account is credited',
-    'credit for',
     'statement',
     'mini statement',
     'emi due',
@@ -96,6 +107,21 @@ class SmsParserService {
     'dr.',
   ];
 
+  // Credit (money-in) signal keywords. Kept deliberately narrower than
+  // debit keywords since credit SMS are noisier (promo/reward spam uses
+  // "credited" loosely) — the skip list above still runs first.
+  static const List<String> _creditKeywords = [
+    'credited',
+    'credited to',
+    'has been credited',
+    'cr.',
+    'received',
+    'refund',
+    'reversed',
+    'reversal',
+    'cashback',
+  ];
+
   static final Map<String, RegExp> _bankPatterns = {
     'BOB': RegExp(
       r'Rs\.?\s*([\d,]+(?:\.\d{1,2})?)\s*Dr\b',
@@ -123,6 +149,44 @@ class SmsParserService {
       dotAll: true,
     ),
   };
+
+  // Credit-side amount patterns — mirrors _bankPatterns but for money-in SMS.
+  static final Map<String, RegExp> _creditPatterns = {
+    'GENERIC_CR': RegExp(
+      r'Rs\.?\s*([\d,]+(?:\.\d{1,2})?)\s*Cr\b',
+      caseSensitive: false,
+    ),
+    'CREDITED': RegExp(
+      r'(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)\s*(?:has\s*been\s*)?credited',
+      caseSensitive: false,
+    ),
+    'RECEIVED': RegExp(
+      r'(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)\s*(?:has\s*been\s*)?received',
+      caseSensitive: false,
+    ),
+    'REFUND': RegExp(
+      r'(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)\s*(?:refunded|reversed|cashback)',
+      caseSensitive: false,
+    ),
+  };
+
+  // Last-resort fallback: any amount-shaped number immediately preceded by
+  // a currency marker (Rs/INR/₹), regardless of the surrounding verb. Used
+  // only when every bank-specific pattern above misses — this catches SMS
+  // template drift (a bank rewording "debited from" to something new)
+  // without needing an app update, at the cost of being less precise about
+  // *which* number in the message is the transaction amount.
+  static final RegExp _genericAmountPattern = RegExp(
+    r'(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)',
+    caseSensitive: false,
+  );
+
+  // Fallback merchant pattern for UPI VPA handles like "john@okhdfcbank" or
+  // "merchantname@ybl" — common when bank SMS reference the payee's UPI ID
+  // directly instead of a readable business name.
+  static final RegExp _vpaPattern = RegExp(
+    r'([a-zA-Z0-9.\-_]{2,})@[a-zA-Z]{2,}',
+  );
 
   // ---------------------------------------------------------------------------
   // Public API
@@ -232,10 +296,19 @@ class SmsParserService {
     // Use the class-level _skipKeywords
     if (_skipKeywords.any((kw) => lower.contains(kw))) return null;
 
-    // Must contain a debit signal
-    if (!_debitKeywords.any((kw) => lower.contains(kw))) return null;
+    final isDebit = _debitKeywords.any((kw) => lower.contains(kw));
+    final isCredit = _creditKeywords.any((kw) => lower.contains(kw));
 
-    final amount = _extractAmount(normalized);
+    // Must contain either a debit or credit signal. If both match (some
+    // bank templates reuse words like "transaction"), prefer debit since
+    // that's the more common/reliable signal in Indian bank SMS templates.
+    if (!isDebit && !isCredit) return null;
+
+    final treatAsCredit = isCredit && !isDebit;
+
+    final amount = treatAsCredit
+        ? _extractCreditAmount(normalized)
+        : _extractAmount(normalized);
     if (amount == null || amount <= 0) return null;
 
     final merchant = _extractMerchant(normalized);
@@ -246,6 +319,7 @@ class SmsParserService {
       source: 'sms',
       timestamp: timestamp ?? DateTime.now(),
       rawSms: normalized,
+      isCredit: treatAsCredit,
     );
   }
 
@@ -256,6 +330,29 @@ class SmsParserService {
         final raw = match.group(1);
         return _parseAmount(raw);
       }
+    }
+    // Fallback: no bank-specific debit pattern matched (likely a template
+    // change or a bank we don't have a dedicated regex for yet). We already
+    // know from _debitKeywords that this SMS is debit-shaped, so a bare
+    // currency-prefixed number is a reasonable last resort.
+    final fallback = _genericAmountPattern.firstMatch(body);
+    if (fallback != null) {
+      return _parseAmount(fallback.group(1));
+    }
+    return null;
+  }
+
+  double? _extractCreditAmount(String body) {
+    for (final pattern in _creditPatterns.values) {
+      final match = pattern.firstMatch(body);
+      if (match != null) {
+        final raw = match.group(1);
+        return _parseAmount(raw);
+      }
+    }
+    final fallback = _genericAmountPattern.firstMatch(body);
+    if (fallback != null) {
+      return _parseAmount(fallback.group(1));
     }
     return null;
   }
@@ -274,18 +371,30 @@ class SmsParserService {
       caseSensitive: false,
     ).firstMatch(body);
 
-    if (merchantMatch == null) return 'Unknown Merchant';
+    if (merchantMatch != null) {
+      var merchant = merchantMatch.group(1)!.trim();
+      merchant = merchant
+          .replaceAll(
+            RegExp(r'\b(ref|reference|txn|transaction).*$',
+                caseSensitive: false),
+            '',
+          )
+          .replaceAll(RegExp(r'[.,;:]+$'), '')
+          .trim();
+      if (merchant.isNotEmpty) return merchant;
+    }
 
-    var merchant = merchantMatch.group(1)!.trim();
-    merchant = merchant
-        .replaceAll(
-          RegExp(r'\b(ref|reference|txn|transaction).*$', caseSensitive: false),
-          '',
-        )
-        .replaceAll(RegExp(r'[.,;:]+$'), '')
-        .trim();
+    // Fallback: pull the payee's UPI VPA handle (e.g. "johndoe@okhdfcbank")
+    // when no readable "to/at/towards <name>" phrase was found. The part
+    // before the @ is often a decent human-readable hint even if it's not
+    // a formatted business name.
+    final vpaMatch = _vpaPattern.firstMatch(body);
+    if (vpaMatch != null) {
+      final handle = vpaMatch.group(1)!.trim();
+      if (handle.isNotEmpty) return handle;
+    }
 
-    return merchant.isEmpty ? 'Unknown Merchant' : merchant;
+    return 'Unknown Merchant';
   }
 
   double? _parseAmount(String? rawAmount) {

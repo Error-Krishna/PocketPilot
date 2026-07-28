@@ -6,6 +6,9 @@ class User {
   final String? phone;
   final double? monthlyBudget;
   final int? budgetResetDate;
+  final double lifetimeSavings;
+  final double? cycleStartingBalance;
+  final double? lastKnownBankBalance;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -17,6 +20,9 @@ class User {
     this.phone,
     this.monthlyBudget,
     this.budgetResetDate,
+    this.lifetimeSavings = 0,
+    this.cycleStartingBalance,
+    this.lastKnownBankBalance,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -29,6 +35,11 @@ class User {
         phone: json['phone'],
         monthlyBudget: (json['monthly_budget'] as num?)?.toDouble(),
         budgetResetDate: json['budget_reset_date'],
+        lifetimeSavings: (json['lifetime_savings'] as num?)?.toDouble() ?? 0,
+        cycleStartingBalance:
+            (json['cycle_starting_balance'] as num?)?.toDouble(),
+        lastKnownBankBalance:
+            (json['last_known_bank_balance'] as num?)?.toDouble(),
         createdAt: DateTime.parse(json['created_at']),
         updatedAt: DateTime.parse(json['updated_at']),
       );

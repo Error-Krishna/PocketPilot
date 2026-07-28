@@ -4,8 +4,16 @@ import 'package:intl/intl.dart';
 class BalanceCard extends StatelessWidget {
   final String userName;
   final double monthlyBudget;
+  final double? lastKnownBankBalance;
+  final DateTime? lastKnownBankBalanceAt;
 
-  const BalanceCard({super.key, required this.userName, required this.monthlyBudget});
+  const BalanceCard({
+    super.key,
+    required this.userName,
+    required this.monthlyBudget,
+    this.lastKnownBankBalance,
+    this.lastKnownBankBalanceAt,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +36,14 @@ class BalanceCard extends StatelessWidget {
               NumberFormat.currency(symbol: '₹', decimalDigits: 0).format(monthlyBudget),
               style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
             ),
+            if (lastKnownBankBalance != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                'Bank shows ~₹${lastKnownBankBalance!.toStringAsFixed(0)} '
+                '(reference only, from last SMS)',
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+              ),
+            ],
           ],
         ),
       ),

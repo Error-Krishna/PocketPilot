@@ -6,7 +6,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.auth import init_firebase
 from core.config import settings
 from core.database import close_mongo_connection, connect_to_mongo
-from routers import autopays, budget, notifications, savings, sms, transactions, users
+from routers import (
+    autopays,
+    budget,
+    notifications,
+    review,
+    reset,
+    savings,
+    settings as settings_router,
+    sms,
+    transactions,
+    users,
+)
 
 
 # pocketpilot-backend/main.py
@@ -47,6 +58,9 @@ app.include_router(budget.router, prefix=API_PREFIX)
 app.include_router(savings.router, prefix=API_PREFIX)
 app.include_router(notifications.router, prefix=API_PREFIX)
 app.include_router(sms.router, prefix=API_PREFIX)
+app.include_router(review.router, prefix=API_PREFIX)
+app.include_router(reset.router, prefix=API_PREFIX)
+app.include_router(settings_router.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

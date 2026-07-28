@@ -27,8 +27,6 @@ async def _get_user_id(current_user: CurrentUser) -> str:
 
 def _coerce_datetime(value: object) -> datetime:
     if isinstance(value, int):
-        from calendar import monthrange
-
         today = datetime.now(timezone.utc)
         max_day = monthrange(today.year, today.month)[1]
         day = min(value, max_day)
@@ -65,26 +63,92 @@ def _next_reset_date(reset_date: datetime, today: datetime) -> datetime:
     return candidate
 
 
+def _cycle_bounds(
+    budget_reset_raw: object,
+    last_reset_date: datetime | None,
+    account_created_at: datetime,
+    today: datetime,
+) -> tuple[datetime, datetime]:
+    """Determine (cycle_start, cycle_end) without requiring a fixed reset
+    date to be configured. This is what makes budget_reset_date genuinely
+    optional rather than mandatory:
+
+    - If the user set a reset day-of-month, the cycle boundary is that
+      recurring date, same as before.
+    - If they didn't, the cycle simply runs from whenever it last reset
+      (or account creation, for a brand new user) to 30 days later. This
+      is a rolling window, not a calendar month — it exists so "days left
+      in cycle" and "daily limit" are always well-defined even for a user
+      who never configured a fixed date, matching the 20-day-minimum
+      pocket-money-match reset path used elsewhere.
+    """
+    cycle_start = _as_utc_datetime(last_reset_date) or _as_utc_datetime(account_created_at) or today
+
+    if budget_reset_raw is not None:
+        reset_date = _coerce_datetime(budget_reset_raw)
+        cycle_end = _next_reset_date(reset_date, today)
+        return cycle_start, cycle_end
+
+    cycle_end = cycle_start + timedelta(days=30)
+    return cycle_start, cycle_end
+
+
 def _sum_amounts(docs: list[dict]) -> float:
     return float(sum(doc.get("amount", 0) or 0 for doc in docs))
 
 
-def _sum_expenses(docs: list[dict]) -> float:
-    return float(
-        sum(
-            float(doc.get("amount", 0) or 0)
-            for doc in docs
-            if doc.get("type") == "expense"
-        )
-    )
+def _sum_discretionary_spend(docs: list[dict]) -> float:
+    """Sum of transactions that actually count against the daily allowance.
 
-
-def _net_amount(docs: list[dict]) -> float:
+    Only DISCRETIONARY expenses burn the daily budget. FIXED_COMMITMENT is
+    already reserved separately via autopays_due. TRANSFER_INTERNAL never
+    counts (it's the user's own money moving, not spend). ONE_TIME_EXCEPTION
+    is excluded from daily math by design (see net_irregular). UNCLASSIFIED
+    is excluded until reviewed, so it can't silently miscount either way.
+    REFUND offsets discretionary spend it reverses.
+    """
     total = 0.0
     for doc in docs:
+        if doc.get("type") != "expense" and doc.get("txn_class") != "refund":
+            continue
+        txn_class = doc.get("txn_class", "discretionary")
+        if doc.get("classification_source") == "pending":
+            continue
         amount = float(doc.get("amount", 0) or 0)
-        total += amount if doc.get("type") == "income" else -amount
+        if txn_class == "discretionary":
+            total += amount
+        elif txn_class == "refund":
+            total -= amount
     return total
+
+
+def _sum_one_time_exceptions(docs: list[dict]) -> float:
+    """Net effect of one-time/emergency transactions for the period.
+
+    These are real money movements (medical bills, emergency repairs) that
+    shouldn't distort the daily allowance math, but still need to reduce
+    the available balance for the month so the plan stays honest.
+    """
+    total = 0.0
+    for doc in docs:
+        if doc.get("txn_class") != "one_time_exception":
+            continue
+        amount = float(doc.get("amount", 0) or 0)
+        total += -amount if doc.get("type") == "expense" else amount
+    return total
+
+
+def _count_needs_review(docs: list[dict]) -> tuple[int, float]:
+    """Count and total amount of transactions still pending classification
+    review, so the user can be alerted rather than have them silently
+    excluded from (or wrongly included in) the budget math.
+
+    Mirrors the review queue's own filter (classification_source == pending)
+    rather than txn_class, since that's the authoritative signal for "has a
+    human confirmed this yet" used by routers/review.py.
+    """
+    pending = [doc for doc in docs if doc.get("classification_source") == "pending"]
+    return len(pending), _sum_amounts(pending)
 
 
 def _as_utc_datetime(value: datetime | None) -> datetime | None:
@@ -133,6 +197,50 @@ async def upsert_budget(payload: BudgetUpdate, current_user: CurrentUser):
     )
 
 
+@router.get("/trend")
+async def get_spend_trend(current_user: CurrentUser, days: int = 7):
+    """Simple day-by-day discretionary spend series for a quick-glance
+    trend line — deliberately not a full analytics breakdown, just
+    "how much did I spend each of the last N days".
+    """
+    days = max(1, min(days, 90))
+    user_id = await _get_user_id(current_user)
+    db = get_database()
+
+    today = datetime.now(timezone.utc)
+    range_start = (today - timedelta(days=days - 1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    range_end = today.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+
+    transactions = await db.transactions.find(
+        {
+            "user_id": user_id,
+            "date": {"$gte": range_start, "$lt": range_end},
+        }
+    ).to_list(length=None)
+
+    # Bucket by calendar day, reusing the same discretionary-spend filter
+    # as the daily/monthly summary so the trend line is consistent with
+    # every other number shown on the dashboard.
+    by_day: dict[date, list[dict]] = {}
+    for txn in transactions:
+        txn_date = txn["date"]
+        if txn_date.tzinfo is None:
+            txn_date = txn_date.replace(tzinfo=timezone.utc)
+        day_key = txn_date.astimezone(timezone.utc).date()
+        by_day.setdefault(day_key, []).append(txn)
+
+    series = []
+    for offset in range(days):
+        day = (range_start + timedelta(days=offset)).date()
+        day_docs = by_day.get(day, [])
+        spent = max(0.0, _sum_discretionary_spend(day_docs))
+        series.append({"date": day.isoformat(), "spent": spent})
+
+    return success_response({"days": days, "series": series})
+
+
 @router.get("/summary")
 async def get_budget_summary(current_user: CurrentUser):
     user_id = await _get_user_id(current_user)
@@ -142,16 +250,29 @@ async def get_budget_summary(current_user: CurrentUser):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     monthly_budget = float(user.get("monthly_budget") or 0)
+    # If the user told us how much of this cycle's money they actually have
+    # left (set at onboarding or reset), that's the real starting point for
+    # this cycle's math — not the full monthly_budget, which would silently
+    # overstate what's available if they'd already spent some of it before
+    # setting up the app or confirming the reset. Falls back to the full
+    # budget when unset, which is the original behavior.
+    cycle_starting_balance = user.get("cycle_starting_balance")
+    cycle_base_amount = (
+        float(cycle_starting_balance)
+        if cycle_starting_balance is not None
+        else monthly_budget
+    )
     budget_reset_raw = user.get("budget_reset_date")
-    if budget_reset_raw is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="budgetResetDate is not configured for this user",
-        )
+    account_created_at = user.get("created_at") or datetime.now(timezone.utc)
+    last_reset_date = user.get("last_reset_date")
 
     today = datetime.now(timezone.utc)
-    reset_date = _coerce_datetime(budget_reset_raw)
-    next_reset_date = _next_reset_date(reset_date, today)
+    # budget_reset_date is genuinely optional now: if unset, the cycle is a
+    # rolling 30-day window from the last reset (or account creation for a
+    # brand-new user) instead of erroring out.
+    cycle_start, next_reset_date = _cycle_bounds(
+        budget_reset_raw, last_reset_date, account_created_at, today
+    )
 
     active_autopays = await db.autopays.find({"user_id": user_id, "is_active": True}).to_list(
         length=None
@@ -164,20 +285,26 @@ async def get_budget_summary(current_user: CurrentUser):
     ]
     total_autopays_due = _sum_amounts(due_autopays)
 
-    month_start = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    next_month_start = (month_start.replace(day=28) + timedelta(days=4)).replace(
-        day=1, hour=0, minute=0, second=0, microsecond=0
-    )
     monthly_transactions = await db.transactions.find(
         {
             "user_id": user_id,
-            "date": {"$gte": month_start, "$lt": next_month_start},
+            "date": {"$gte": cycle_start, "$lt": next_reset_date},
         }
     ).to_list(length=None)
-    spent_this_month = _sum_expenses(monthly_transactions)
-    net_irregular = _net_amount(monthly_transactions)
-    available_balance = monthly_budget + net_irregular - total_autopays_due
-    remaining_balance = available_balance
+    # True signed value — a refund can legitimately exceed same-window
+    # discretionary spend (e.g. a delayed cashback), and that excess must
+    # still correctly increase the remaining budget below. Only the
+    # user-facing "spent" figure gets clamped for display, further down.
+    spent_this_month_signed = _sum_discretionary_spend(monthly_transactions)
+    net_irregular = _sum_one_time_exceptions(monthly_transactions)
+    needs_review_count, needs_review_amount = _count_needs_review(monthly_transactions)
+    available_balance = cycle_base_amount + net_irregular - total_autopays_due
+    remaining_balance = available_balance - spent_this_month_signed
+    # "Spent this month" should never read negative to the user — that's
+    # never meaningful even when it's mathematically what a refund-heavy
+    # window produces. Display value only; math above already used the
+    # true signed figure.
+    spent_this_month = max(0.0, spent_this_month_signed)
 
     remaining_days = max(1, (next_reset_date.date() - today.date()).days)
     daily_limit = remaining_balance / remaining_days
@@ -190,15 +317,39 @@ async def get_budget_summary(current_user: CurrentUser):
             "date": {"$gte": day_start, "$lt": day_end},
         }
     ).to_list(length=None)
-    spent_today = _sum_expenses(today_transactions)
+    # Display-only clamp, same rationale as spent_this_month above.
+    spent_today = max(0.0, _sum_discretionary_spend(today_transactions))
     income_today = float(
         sum(
             float(doc.get("amount", 0) or 0)
             for doc in today_transactions
-            if doc.get("type") == "income"
+            if doc.get("type") == "income" and doc.get("txn_class") == "income_regular"
         )
     )
     saved_today = max(0, daily_limit - spent_today)
+    # Saved so far this cycle: how much of the budget allotted for days
+    # already elapsed was NOT spent. Elapsed days is at least 1 (today
+    # counts), and we use remaining_balance/available_balance rather than
+    # daily_limit*elapsed to stay consistent even if daily_limit shifted
+    # mid-cycle (e.g. after a one-time exception).
+    days_elapsed = max(1, (today.date() - cycle_start.date()).days + 1)
+    total_cycle_days = days_elapsed + remaining_days
+    budget_for_elapsed_days = (
+        (available_balance / total_cycle_days) * days_elapsed if total_cycle_days else 0
+    )
+    saved_this_month = max(0.0, budget_for_elapsed_days - spent_this_month)
+    lifetime_savings = float(user.get("lifetime_savings") or 0)
+
+    # "Waiting for pocket money" state: cycle is genuinely exhausted
+    # (nothing left today or for the rest of the cycle), rather than the
+    # bare zero/negative number reading as a bug or a scary warning. The
+    # app can't know when the next credit is coming, so this is purely a
+    # "you're at zero, that's expected, hang tight" signal — not a
+    # prediction of when funds will arrive.
+    is_awaiting_funds = remaining_balance <= 0 and daily_limit <= 0
+
+    last_known_bank_balance = user.get("last_known_bank_balance")
+    last_known_bank_balance_at = user.get("last_known_bank_balance_at")
 
     return success_response(
         {
@@ -207,6 +358,7 @@ async def get_budget_summary(current_user: CurrentUser):
             "totalAutopaysDue": total_autopays_due,
             "availableBalance": available_balance,
             "spentThisMonth": spent_this_month,
+            "savedThisMonth": saved_this_month,
             "netIrregularTransactions": net_irregular,
             "remainingBalance": remaining_balance,
             "dailyLimit": daily_limit,
@@ -214,5 +366,16 @@ async def get_budget_summary(current_user: CurrentUser):
             "incomeToday": income_today,
             "savedToday": saved_today,
             "remainingDays": remaining_days,
+            "cycleStart": cycle_start.isoformat(),
+            "cycleEnd": next_reset_date.isoformat(),
+            "lifetimeSavings": lifetime_savings,
+            "needsReviewCount": needs_review_count,
+            "needsReviewAmount": needs_review_amount,
+            "isAwaitingFunds": is_awaiting_funds,
+            "cycleStartingBalance": cycle_starting_balance,
+            "lastKnownBankBalance": last_known_bank_balance,
+            "lastKnownBankBalanceAt": last_known_bank_balance_at.isoformat()
+            if last_known_bank_balance_at
+            else None,
         }
     )

@@ -5,16 +5,49 @@ class DailyLimitCard extends StatelessWidget {
   final double dailyLimit;
   final double savedToday;
   final double incomeToday;
+  final bool isAwaitingFunds;
 
   const DailyLimitCard({
     super.key,
     required this.dailyLimit,
     required this.savedToday,
     required this.incomeToday,
+    this.isAwaitingFunds = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (isAwaitingFunds) {
+      return Card(
+        color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: const [
+                  Icon(Icons.hourglass_bottom, color: Color(0xFF38BDF8)),
+                  SizedBox(width: 8),
+                  Text(
+                    'Cycle complete',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'You\'ve used this cycle\'s budget. Hang tight for your '
+                'next pocket money — we\'ll ask you to confirm when it '
+                'arrives.',
+                style: TextStyle(fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final percent =
         dailyLimit > 0 ? (savedToday / dailyLimit).clamp(0.0, 1.0) : 0.0;
     return Card(

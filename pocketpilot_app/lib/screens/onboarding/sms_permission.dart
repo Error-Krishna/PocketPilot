@@ -53,8 +53,6 @@ class _SmsPermissionScreenState extends State<SmsPermissionScreen> {
         await _smsSubscription!.cancel();
       }
       _smsSubscription = _smsParserService.parsedTransactions.listen((parsed) {
-        print(
-            'SMS parsed: amount=${parsed.amount}, merchant=${parsed.merchant}');
         messenger.showSnackBar(
           SnackBar(
             content: Text(
@@ -71,8 +69,7 @@ class _SmsPermissionScreenState extends State<SmsPermissionScreen> {
 
       if (!mounted) return;
       context.go('/dashboard');
-    } catch (e) {
-      print('SMS PERMISSION FLOW ERROR: $e');
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -107,8 +104,8 @@ class _SmsPermissionScreenState extends State<SmsPermissionScreen> {
           ),
         ),
       );
-    } catch (e) {
-      print('SMS BACKEND SYNC ERROR: $e');
+    } catch (_) {
+      // Non-fatal: sync will retry on next inbox scan.
     }
   }
 

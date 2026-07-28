@@ -7,9 +7,15 @@ import '../services/api_service.dart';
 import '../widgets/balance_card.dart';
 import '../widgets/daily_limit_card.dart';
 import '../widgets/savings_card.dart';
+import '../widgets/spent_summary_card.dart';
+import '../widgets/lifetime_savings_card.dart';
+import '../widgets/last_cycle_card.dart';
+import '../widgets/spend_trend_card.dart';
 import '../widgets/transaction_tile.dart';
 import '../models/transaction.dart';
 import '../models/budget_summary.dart';
+import '../models/monthly_archive.dart';
+import '../models/spend_trend.dart';
 import '../models/user.dart';
 import '../services/sms_parser_service.dart';
 import '../services/notification_service.dart';
@@ -25,6 +31,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final SmsParserService _smsParser = SmsParserService();
   StreamSubscription<ParsedTransaction>? _smsSubscription;
   Timer? _syncTimer;
+  int _trendDays = 7;
 
   late Future<List<dynamic>> _combinedFuture;
 
@@ -45,13 +52,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .then((list) => list..sort((a, b) => b.date.compareTo(a.date)));
     final savingsFuture = api.getSavingsGoals();
     final userFuture = api.getCurrentUser();
+    final reviewCountFuture = api.getReviewQueueCount().catchError((_) => 0);
+    final trendFuture = api
+        .getSpendTrend(days: _trendDays)
+        .catchError((_) => <SpendTrendPoint>[]);
+    final historyFuture = api
+        .getResetHistory()
+        .catchError((_) => (<MonthlyArchive>[], 0.0));
 
     _combinedFuture = Future.wait([
       summaryFuture,
       transactionsFuture,
       savingsFuture,
       userFuture,
-    ]);
+      reviewCountFuture,
+      trendFuture,
+      historyFuture,
+    ]).then((results) {
+      // Fire the daily-limit notification once per real data load,
+      // not on every widget rebuild.
+      if (mounted) {
+        final summary = results[0] as BudgetSummary;
+        NotificationService.showDailyLimitNotification(
+          dailyLimit: summary.dailyLimit,
+          spentToday: summary.spentToday,
+          savedToday: summary.savedToday,
+          isAwaitingFunds: summary.isAwaitingFunds,
+        );
+      }
+      return results;
+    });
+  }
+
+  void _onTrendRangeChanged(int days) {
+    setState(() {
+      _trendDays = days;
+      _loadData();
+    });
   }
 
   Future<void> _startSmsListener() async {
@@ -84,6 +121,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 'source': txn.source,
                 'raw_sms': txn.rawSms,
                 'sms_fingerprint': txn.fingerprint,
+                'is_credit': txn.isCredit,
               },
             ]);
 
@@ -98,6 +136,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
               );
+            }
+
+            final resetCandidateId =
+                result['resetCandidateTransactionId'] as String?;
+            if (resetCandidateId != null && mounted) {
+              await _promptResetConfirmation(resetCandidateId, txn.amount);
             }
           } catch (e) {
             debugPrint('SMS dashboard sync error: $e');
@@ -122,6 +166,61 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Future<void> _promptResetConfirmation(
+      String transactionId, double amount) async {
+    final api = context.read<ApiService>();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: const Text('New pocket money?'),
+        content: Text(
+          'We noticed a credit of ₹${amount.toStringAsFixed(0)} matching your '
+          'monthly plan. Is this your pocket money for a new cycle?\n\n'
+          'If yes, this month will be closed out and saved to your history, '
+          'and a fresh cycle starts today.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No, just a credit'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Yes, start new cycle'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == null) return; // dialog dismissed some other way
+
+    try {
+      final result = await api.confirmReset(transactionId, confirmed);
+      if (!mounted) return;
+
+      if (result['reset'] == true) {
+        setState(_loadData);
+        final archived = result['archivedCycle'] as Map<String, dynamic>?;
+        final savedLastCycle = archived != null
+            ? (archived['totalSaved'] as num).toDouble()
+            : 0.0;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              savedLastCycle >= 0
+                  ? 'New cycle started. You saved ₹${savedLastCycle.toStringAsFixed(0)} last cycle!'
+                  : 'New cycle started.',
+            ),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Reset confirmation error: $e');
+    }
+  }
+
   @override
   void dispose() {
     _syncTimer?.cancel();
@@ -138,6 +237,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         title: const Text('Dashboard'),
         actions: [
+          FutureBuilder<List<dynamic>>(
+            future: _combinedFuture,
+            builder: (context, snapshot) {
+              final reviewCount =
+                  snapshot.hasData ? snapshot.data![4] as int : 0;
+              if (reviewCount <= 0) return const SizedBox.shrink();
+              return IconButton(
+                onPressed: () => context.go('/review'),
+                icon: Badge(
+                  label: Text('$reviewCount'),
+                  child: const Icon(Icons.rule_folder_outlined),
+                ),
+                tooltip: '$reviewCount transaction(s) need review',
+              );
+            },
+          ),
           IconButton(
             onPressed: () => context.go('/settings'),
             icon: const Icon(Icons.settings),
@@ -191,34 +306,76 @@ class _DashboardScreenState extends State<DashboardScreen> {
             final transactions = snapshot.data![1] as List<Transaction>;
             final goals = snapshot.data![2] as List<SavingsGoal>;
             final user = snapshot.data![3] as User;
+            final trend = snapshot.data![5] as List<SpendTrendPoint>;
+            final historyResult =
+                snapshot.data![6] as (List<MonthlyArchive>, double);
+            final history = historyResult.$1;
+            final lifetimeSavings = historyResult.$2;
+            final lastCycle = history.isNotEmpty ? history.first : null;
 
             final totalSavings =
                 goals.fold<double>(0.0, (sum, g) => sum + g.currentAmount);
             final goalCount = goals.length;
-            // Show persistent daily limit notification
-            NotificationService.showDailyLimitNotification(
-              dailyLimit: summary.dailyLimit,
-              spentToday: summary.spentToday,
-              savedToday: summary.savedToday,
-            );
 
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                // --- Today, at a glance ---
                 BalanceCard(
                   userName: user.displayName,
                   monthlyBudget: summary.monthlyBudget,
+                  lastKnownBankBalance: summary.lastKnownBankBalance,
+                  lastKnownBankBalanceAt: summary.lastKnownBankBalanceAt,
                 ),
                 const SizedBox(height: 16),
                 DailyLimitCard(
                   dailyLimit: summary.dailyLimit,
                   savedToday: summary.savedToday,
                   incomeToday: summary.incomeToday, // required
+                  isAwaitingFunds: summary.isAwaitingFunds,
                 ),
                 const SizedBox(height: 16),
+
+                // --- This cycle ---
+                SpentSummaryCard(
+                  spentThisMonth: summary.spentThisMonth,
+                  monthlyBudget: summary.monthlyBudget,
+                  remainingDays: summary.remainingDays,
+                ),
+                const SizedBox(height: 16),
+
+                // --- Lifetime picture, tappable for full history ---
+                LifetimeSavingsCard(
+                  lifetimeSavings: lifetimeSavings,
+                  onTap: () => context.push('/history', extra: {
+                    'history': history,
+                    'lifetimeSavings': lifetimeSavings,
+                  }),
+                ),
+                if (lastCycle != null) ...[
+                  const SizedBox(height: 12),
+                  LastCycleCard(
+                    lastCycle: lastCycle,
+                    onTap: () => context.push('/history', extra: {
+                      'history': history,
+                      'lifetimeSavings': lifetimeSavings,
+                    }),
+                  ),
+                ],
+                const SizedBox(height: 16),
+
+                // --- Trend, quick glance only ---
+                SpendTrendCard(
+                  series: trend,
+                  selectedDays: _trendDays,
+                  onRangeChanged: _onTrendRangeChanged,
+                ),
+                const SizedBox(height: 16),
+
                 SavingsCard(
                   totalSaved: totalSavings,
                   goalCount: goalCount,
+                  onTap: () => context.push('/savings'),
                 ),
                 const SizedBox(height: 16),
                 Row(

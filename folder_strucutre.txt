@@ -1,0 +1,613 @@
+.
+├── context.md
+├── folder_strucutre.txt
+├── pocketpilot_app
+│   ├── analysis_options.yaml
+│   ├── android
+│   │   ├── app
+│   │   │   ├── build.gradle.kts
+│   │   │   ├── google-services.json
+│   │   │   └── src
+│   │   │       ├── debug
+│   │   │       │   └── AndroidManifest.xml
+│   │   │       ├── main
+│   │   │       │   ├── AndroidManifest.xml
+│   │   │       │   ├── drawable
+│   │   │       │   │   └── launch_background.xml
+│   │   │       │   ├── drawable-v21
+│   │   │       │   │   └── launch_background.xml
+│   │   │       │   ├── java
+│   │   │       │   │   └── io
+│   │   │       │   │       └── flutter
+│   │   │       │   │           └── plugins
+│   │   │       │   │               └── GeneratedPluginRegistrant.java
+│   │   │       │   ├── kotlin
+│   │   │       │   │   └── com
+│   │   │       │   │       ├── example
+│   │   │       │   │       │   └── pocketpilot
+│   │   │       │   │       │       └── MainActivity.kt
+│   │   │       │   │       └── pocketpilot
+│   │   │       │   │           └── pocketpilot_app
+│   │   │       │   │               └── MainActivity.kt
+│   │   │       │   ├── mipmap-hdpi
+│   │   │       │   │   └── ic_launcher.png
+│   │   │       │   ├── mipmap-mdpi
+│   │   │       │   │   └── ic_launcher.png
+│   │   │       │   ├── mipmap-xhdpi
+│   │   │       │   │   └── ic_launcher.png
+│   │   │       │   ├── mipmap-xxhdpi
+│   │   │       │   │   └── ic_launcher.png
+│   │   │       │   ├── mipmap-xxxhdpi
+│   │   │       │   │   └── ic_launcher.png
+│   │   │       │   ├── res
+│   │   │       │   │   ├── drawable
+│   │   │       │   │   │   └── launch_background.xml
+│   │   │       │   │   ├── drawable-v21
+│   │   │       │   │   │   └── launch_background.xml
+│   │   │       │   │   ├── mipmap-hdpi
+│   │   │       │   │   │   └── ic_launcher.png
+│   │   │       │   │   ├── mipmap-mdpi
+│   │   │       │   │   │   └── ic_launcher.png
+│   │   │       │   │   ├── mipmap-xhdpi
+│   │   │       │   │   │   └── ic_launcher.png
+│   │   │       │   │   ├── mipmap-xxhdpi
+│   │   │       │   │   │   └── ic_launcher.png
+│   │   │       │   │   ├── mipmap-xxxhdpi
+│   │   │       │   │   │   └── ic_launcher.png
+│   │   │       │   │   ├── values
+│   │   │       │   │   │   └── styles.xml
+│   │   │       │   │   └── values-night
+│   │   │       │   │       └── styles.xml
+│   │   │       │   ├── values
+│   │   │       │   │   └── styles.xml
+│   │   │       │   └── values-night
+│   │   │       │       └── styles.xml
+│   │   │       └── profile
+│   │   │           └── AndroidManifest.xml
+│   │   ├── app 2
+│   │   │   └── src
+│   │   │       └── main
+│   │   │           ├── java
+│   │   │           │   └── io
+│   │   │           │       └── flutter
+│   │   │           └── kotlin
+│   │   │               └── com
+│   │   │                   └── pocketpilot
+│   │   │                       └── pocketpilot_app
+│   │   │                           └── MainActivity.kt
+│   │   ├── build.gradle.kts
+│   │   ├── gradle
+│   │   │   └── wrapper
+│   │   │       ├── gradle-wrapper.jar
+│   │   │       └── gradle-wrapper.properties
+│   │   ├── gradle.properties
+│   │   ├── gradlew
+│   │   ├── gradlew.bat
+│   │   ├── local.properties
+│   │   └── settings.gradle.kts
+│   ├── build
+│   │   ├── 92e84aada260be4f35342ec8e69f9b64 2
+│   │   ├── 92e84aada260be4f35342ec8e69f9b64 3
+│   │   ├── 92e84aada260be4f35342ec8e69f9b64 4
+│   │   ├── app
+│   │   │   └── intermediates
+│   │   │       ├── cxx
+│   │   │       │   └── debug
+│   │   │       │       └── 5v1f6k1o
+│   │   │       │           └── obj
+│   │   │       │               ├── arm64-v8a
+│   │   │       │               ├── armeabi-v7a
+│   │   │       │               └── x86_64
+│   │   │       ├── data_binding_layout_info_type_merge
+│   │   │       │   └── debug
+│   │   │       │       └── mergeDebugResources
+│   │   │       │           └── out
+│   │   │       ├── data_binding_layout_info_type_package
+│   │   │       │   └── debug
+│   │   │       │       └── packageDebugResources
+│   │   │       │           └── out
+│   │   │       ├── desugar_graph
+│   │   │       │   └── debug
+│   │   │       │       └── dexBuilderDebug
+│   │   │       │           └── out
+│   │   │       │               ├── externalLibs
+│   │   │       │               ├── mixedScopes
+│   │   │       │               └── otherProjects
+│   │   │       ├── global_synthetics_external_lib
+│   │   │       │   └── debug
+│   │   │       │       └── dexBuilderDebug
+│   │   │       │           └── out
+│   │   │       ├── global_synthetics_external_libs_artifact_transform
+│   │   │       │   └── debug
+│   │   │       │       └── dexBuilderDebug
+│   │   │       │           └── out
+│   │   │       ├── global_synthetics_project
+│   │   │       │   └── debug
+│   │   │       │       └── dexBuilderDebug
+│   │   │       │           └── out
+│   │   │       ├── java_res
+│   │   │       │   └── debug
+│   │   │       │       └── processDebugJavaRes
+│   │   │       │           └── out
+│   │   │       │               └── com
+│   │   │       │                   ├── example
+│   │   │       │                   │   └── pocketpilot
+│   │   │       │                   └── pocketpilot
+│   │   │       │                       └── pocketpilot_app
+│   │   │       ├── merged_test_only_native_libs
+│   │   │       │   └── debug
+│   │   │       │       └── mergeDebugNativeLibs
+│   │   │       │           └── out
+│   │   │       └── sub_project_dex_archive
+│   │   │           └── debug
+│   │   │               └── dexBuilderDebug
+│   │   │                   └── out
+│   │   ├── app 3
+│   │   ├── app 4
+│   │   ├── firebase_auth
+│   │   │   └── intermediates
+│   │   │       ├── aar_libs_directory
+│   │   │       │   └── debug
+│   │   │       │       └── syncDebugLibJars
+│   │   │       │           └── libs
+│   │   │       ├── compiled_local_resources
+│   │   │       │   └── debug
+│   │   │       │       └── compileDebugLibraryResources
+│   │   │       │           └── out
+│   │   │       ├── data_binding_layout_info_type_package
+│   │   │       │   └── debug
+│   │   │       │       └── packageDebugResources
+│   │   │       │           └── out
+│   │   │       ├── incremental
+│   │   │       │   └── debug
+│   │   │       │       └── packageDebugResources
+│   │   │       │           ├── merged.dir
+│   │   │       │           └── stripped.dir
+│   │   │       ├── library_and_local_jars_jni
+│   │   │       │   └── debug
+│   │   │       │       └── copyDebugJniLibsProjectAndLocalJars
+│   │   │       │           └── jni
+│   │   │       ├── library_jni
+│   │   │       │   └── debug
+│   │   │       │       └── copyDebugJniLibsProjectOnly
+│   │   │       │           └── jni
+│   │   │       └── merged_jni_libs
+│   │   │           └── debug
+│   │   │               └── mergeDebugJniLibFolders
+│   │   │                   └── out
+│   │   ├── firebase_auth 2
+│   │   ├── firebase_auth 3
+│   │   ├── firebase_core
+│   │   │   └── intermediates
+│   │   │       └── incremental
+│   │   │           ├── debug
+│   │   │           │   └── packageDebugResources
+│   │   │           │       ├── compile-file-map.properties
+│   │   │           │       └── merger.xml
+│   │   │           ├── debug-mergeJavaRes
+│   │   │           │   └── merge-state
+│   │   │           ├── mergeDebugAssets
+│   │   │           │   └── merger.xml
+│   │   │           └── mergeDebugJniLibFolders
+│   │   │               └── merger.xml
+│   │   ├── flutter_local_notifications 2
+│   │   │   └── intermediates
+│   │   │       └── incremental
+│   │   ├── flutter_local_notifications 3
+│   │   ├── flutter_secure_storage
+│   │   │   └── intermediates
+│   │   │       ├── aar_libs_directory
+│   │   │       │   └── debug
+│   │   │       │       └── syncDebugLibJars
+│   │   │       │           └── libs
+│   │   │       ├── compiled_local_resources
+│   │   │       │   └── debug
+│   │   │       │       └── compileDebugLibraryResources
+│   │   │       │           └── out
+│   │   │       ├── data_binding_layout_info_type_package
+│   │   │       │   └── debug
+│   │   │       │       └── packageDebugResources
+│   │   │       │           └── out
+│   │   │       ├── incremental
+│   │   │       │   └── debug
+│   │   │       │       └── packageDebugResources
+│   │   │       │           ├── merged.dir
+│   │   │       │           └── stripped.dir
+│   │   │       ├── library_and_local_jars_jni
+│   │   │       │   └── debug
+│   │   │       │       └── copyDebugJniLibsProjectAndLocalJars
+│   │   │       │           └── jni
+│   │   │       ├── library_jni
+│   │   │       │   └── debug
+│   │   │       │       └── copyDebugJniLibsProjectOnly
+│   │   │       │           └── jni
+│   │   │       └── merged_jni_libs
+│   │   │           └── debug
+│   │   │               └── mergeDebugJniLibFolders
+│   │   │                   └── out
+│   │   ├── flutter_secure_storage 2
+│   │   ├── flutter_secure_storage 3
+│   │   ├── flutter_secure_storage 4
+│   │   ├── google_sign_in_android 2
+│   │   ├── google_sign_in_android 3
+│   │   ├── google_sign_in_android 4
+│   │   ├── jni
+│   │   │   └── intermediates
+│   │   │       ├── aar_libs_directory
+│   │   │       │   └── debug
+│   │   │       │       └── syncDebugLibJars
+│   │   │       │           └── libs
+│   │   │       ├── compiled_local_resources
+│   │   │       │   └── debug
+│   │   │       │       └── compileDebugLibraryResources
+│   │   │       │           └── out
+│   │   │       ├── data_binding_layout_info_type_package
+│   │   │       │   └── debug
+│   │   │       │       └── packageDebugResources
+│   │   │       │           └── out
+│   │   │       ├── incremental
+│   │   │       │   └── debug
+│   │   │       │       └── packageDebugResources
+│   │   │       │           ├── merged.dir
+│   │   │       │           └── stripped.dir
+│   │   │       ├── merged_jni_libs
+│   │   │       │   └── debug
+│   │   │       │       └── mergeDebugJniLibFolders
+│   │   │       │           └── out
+│   │   │       └── merged_test_only_native_libs
+│   │   │           └── debug
+│   │   │               └── mergeDebugNativeLibs
+│   │   │                   └── out
+│   │   ├── jni 5
+│   │   ├── jni 6
+│   │   ├── jni 7
+│   │   ├── jni_flutter 2
+│   │   ├── jni_flutter 3
+│   │   ├── jni_flutter 4
+│   │   ├── reports
+│   │   │   └── problems
+│   │   │       └── problems-report.html
+│   │   ├── reports 2
+│   │   ├── reports 3
+│   │   ├── reports 4
+│   │   ├── reports 5
+│   │   ├── shared_preferences_android
+│   │   │   └── intermediates
+│   │   │       ├── aar_libs_directory
+│   │   │       │   └── debug
+│   │   │       │       └── syncDebugLibJars
+│   │   │       │           └── libs
+│   │   │       ├── compiled_local_resources
+│   │   │       │   └── debug
+│   │   │       │       └── compileDebugLibraryResources
+│   │   │       │           └── out
+│   │   │       ├── data_binding_layout_info_type_package
+│   │   │       │   └── debug
+│   │   │       │       └── packageDebugResources
+│   │   │       │           └── out
+│   │   │       ├── incremental
+│   │   │       │   └── debug
+│   │   │       │       └── packageDebugResources
+│   │   │       │           ├── merged.dir
+│   │   │       │           └── stripped.dir
+│   │   │       ├── java_res
+│   │   │       │   └── debug
+│   │   │       │       └── processDebugJavaRes
+│   │   │       │           └── out
+│   │   │       │               └── io
+│   │   │       │                   └── flutter
+│   │   │       │                       └── plugins
+│   │   │       │                           └── sharedpreferences
+│   │   │       ├── library_and_local_jars_jni
+│   │   │       │   └── debug
+│   │   │       │       └── copyDebugJniLibsProjectAndLocalJars
+│   │   │       │           └── jni
+│   │   │       ├── library_jni
+│   │   │       │   └── debug
+│   │   │       │       └── copyDebugJniLibsProjectOnly
+│   │   │       │           └── jni
+│   │   │       └── merged_jni_libs
+│   │   │           └── debug
+│   │   │               └── mergeDebugJniLibFolders
+│   │   │                   └── out
+│   │   ├── shared_preferences_android 2
+│   │   ├── shared_preferences_android 3
+│   │   ├── shared_preferences_android 4
+│   │   ├── telephony
+│   │   │   └── intermediates
+│   │   │       ├── aar_libs_directory
+│   │   │       │   └── debug
+│   │   │       │       └── syncDebugLibJars
+│   │   │       │           └── libs
+│   │   │       ├── compiled_local_resources
+│   │   │       │   └── debug
+│   │   │       │       └── compileDebugLibraryResources
+│   │   │       │           └── out
+│   │   │       ├── data_binding_layout_info_type_package
+│   │   │       │   └── debug
+│   │   │       │       └── packageDebugResources
+│   │   │       │           └── out
+│   │   │       ├── incremental
+│   │   │       │   └── debug
+│   │   │       │       └── packageDebugResources
+│   │   │       │           ├── merged.dir
+│   │   │       │           └── stripped.dir
+│   │   │       ├── java_res
+│   │   │       │   └── debug
+│   │   │       │       └── processDebugJavaRes
+│   │   │       │           └── out
+│   │   │       │               └── com
+│   │   │       │                   └── shounakmulay
+│   │   │       │                       └── telephony
+│   │   │       │                           ├── sms
+│   │   │       │                           └── utils
+│   │   │       ├── library_and_local_jars_jni
+│   │   │       │   └── debug
+│   │   │       │       └── copyDebugJniLibsProjectAndLocalJars
+│   │   │       │           └── jni
+│   │   │       ├── library_jni
+│   │   │       │   └── debug
+│   │   │       │       └── copyDebugJniLibsProjectOnly
+│   │   │       │           └── jni
+│   │   │       └── merged_jni_libs
+│   │   │           └── debug
+│   │   │               └── mergeDebugJniLibFolders
+│   │   │                   └── out
+│   │   ├── telephony 2
+│   │   ├── telephony 3
+│   │   ├── telephony 4
+│   │   └── telephony 5
+│   ├── firebase.json
+│   ├── ios
+│   │   ├── Flutter
+│   │   │   ├── AppFrameworkInfo.plist
+│   │   │   ├── Debug.xcconfig
+│   │   │   ├── ephemeral
+│   │   │   │   ├── flutter_lldb_helper 2.py
+│   │   │   │   ├── flutter_lldb_helper 4.py
+│   │   │   │   ├── flutter_lldbinit 2
+│   │   │   │   ├── flutter_lldbinit 4
+│   │   │   │   ├── flutter_native_integration 2.env
+│   │   │   │   ├── flutter_native_integration 4.env
+│   │   │   │   ├── Packages 2
+│   │   │   │   ├── Packages 4
+│   │   │   │   └── Packages 6
+│   │   │   ├── flutter_export_environment.sh
+│   │   │   ├── Generated.xcconfig
+│   │   │   └── Release.xcconfig
+│   │   ├── Runner
+│   │   │   ├── AppDelegate.swift
+│   │   │   ├── Assets.xcassets
+│   │   │   │   ├── AppIcon.appiconset
+│   │   │   │   │   ├── Contents.json
+│   │   │   │   │   ├── Icon-App-1024x1024@1x.png
+│   │   │   │   │   ├── Icon-App-20x20@1x.png
+│   │   │   │   │   ├── Icon-App-20x20@2x.png
+│   │   │   │   │   ├── Icon-App-20x20@3x.png
+│   │   │   │   │   ├── Icon-App-29x29@1x.png
+│   │   │   │   │   ├── Icon-App-29x29@2x.png
+│   │   │   │   │   ├── Icon-App-29x29@3x.png
+│   │   │   │   │   ├── Icon-App-40x40@1x.png
+│   │   │   │   │   ├── Icon-App-40x40@2x.png
+│   │   │   │   │   ├── Icon-App-40x40@3x.png
+│   │   │   │   │   ├── Icon-App-60x60@2x.png
+│   │   │   │   │   ├── Icon-App-60x60@3x.png
+│   │   │   │   │   ├── Icon-App-76x76@1x.png
+│   │   │   │   │   ├── Icon-App-76x76@2x.png
+│   │   │   │   │   └── Icon-App-83.5x83.5@2x.png
+│   │   │   │   └── LaunchImage.imageset
+│   │   │   │       ├── Contents.json
+│   │   │   │       ├── LaunchImage.png
+│   │   │   │       ├── LaunchImage@2x.png
+│   │   │   │       ├── LaunchImage@3x.png
+│   │   │   │       └── README.md
+│   │   │   ├── Base.lproj
+│   │   │   │   ├── LaunchScreen.storyboard
+│   │   │   │   └── Main.storyboard
+│   │   │   ├── GeneratedPluginRegistrant.h
+│   │   │   ├── GeneratedPluginRegistrant.m
+│   │   │   ├── GoogleService-Info.plist
+│   │   │   ├── Info.plist
+│   │   │   ├── Runner-Bridging-Header.h
+│   │   │   └── SceneDelegate.swift
+│   │   ├── Runner.xcodeproj
+│   │   │   ├── project.pbxproj
+│   │   │   ├── project.xcworkspace
+│   │   │   │   ├── contents.xcworkspacedata
+│   │   │   │   └── xcshareddata
+│   │   │   │       ├── IDEWorkspaceChecks.plist
+│   │   │   │       └── WorkspaceSettings.xcsettings
+│   │   │   └── xcshareddata
+│   │   │       └── xcschemes
+│   │   │           └── Runner.xcscheme
+│   │   ├── Runner.xcworkspace
+│   │   │   ├── contents.xcworkspacedata
+│   │   │   └── xcshareddata
+│   │   │       ├── IDEWorkspaceChecks.plist
+│   │   │       └── WorkspaceSettings.xcsettings
+│   │   └── RunnerTests
+│   │       └── RunnerTests.swift
+│   ├── lib
+│   │   ├── firebase_options.dart
+│   │   ├── main.dart
+│   │   ├── models
+│   │   │   ├── autopay.dart
+│   │   │   ├── budget_summary.dart
+│   │   │   ├── transaction.dart
+│   │   │   └── user.dart
+│   │   ├── screens
+│   │   │   ├── autopays.dart
+│   │   │   ├── dashboard.dart
+│   │   │   ├── onboarding
+│   │   │   │   ├── autopay_setup.dart
+│   │   │   │   ├── budget_setup.dart
+│   │   │   │   ├── sms_permission.dart
+│   │   │   │   └── welcome.dart
+│   │   │   ├── settings.dart
+│   │   │   └── transactions.dart
+│   │   ├── services
+│   │   │   ├── api_service.dart
+│   │   │   ├── auth_service.dart
+│   │   │   ├── notification_service.dart
+│   │   │   ├── sms_parser_service.dart
+│   │   │   └── storage_service.dart
+│   │   └── widgets
+│   │       ├── balance_card.dart
+│   │       ├── daily_limit_card.dart
+│   │       ├── savings_card.dart
+│   │       └── transaction_tile.dart
+│   ├── linux
+│   │   ├── CMakeLists.txt
+│   │   ├── flutter
+│   │   │   ├── CMakeLists.txt
+│   │   │   ├── ephemeral
+│   │   │   ├── generated_plugin_registrant.cc
+│   │   │   ├── generated_plugin_registrant.h
+│   │   │   └── generated_plugins.cmake
+│   │   └── runner
+│   │       ├── CMakeLists.txt
+│   │       ├── main.cc
+│   │       ├── my_application.cc
+│   │       └── my_application.h
+│   ├── macos
+│   │   ├── Flutter
+│   │   │   ├── ephemeral
+│   │   │   │   ├── flutter_export_environment 2.sh
+│   │   │   │   ├── flutter_export_environment 4.sh
+│   │   │   │   ├── flutter_native_integration 2.env
+│   │   │   │   ├── flutter_native_integration 4.env
+│   │   │   │   ├── Flutter-Generated 3.xcconfig
+│   │   │   │   ├── Flutter-Generated 4.xcconfig
+│   │   │   │   └── Packages
+│   │   │   │       ├── FlutterGeneratedPluginSwiftPackage
+│   │   │   │       │   └── Sources
+│   │   │   │       │       └── FlutterGeneratedPluginSwiftPackage
+│   │   │   │       └── FlutterGeneratedPluginSwiftPackage 2
+│   │   │   ├── Flutter-Debug.xcconfig
+│   │   │   ├── Flutter-Release.xcconfig
+│   │   │   └── GeneratedPluginRegistrant.swift
+│   │   ├── Runner
+│   │   │   ├── AppDelegate.swift
+│   │   │   ├── Assets.xcassets
+│   │   │   │   └── AppIcon.appiconset
+│   │   │   │       ├── app_icon_1024.png
+│   │   │   │       ├── app_icon_128.png
+│   │   │   │       ├── app_icon_16.png
+│   │   │   │       ├── app_icon_256.png
+│   │   │   │       ├── app_icon_32.png
+│   │   │   │       ├── app_icon_512.png
+│   │   │   │       ├── app_icon_64.png
+│   │   │   │       └── Contents.json
+│   │   │   ├── Base.lproj
+│   │   │   │   └── MainMenu.xib
+│   │   │   ├── Configs
+│   │   │   │   ├── AppInfo.xcconfig
+│   │   │   │   ├── Debug.xcconfig
+│   │   │   │   ├── Release.xcconfig
+│   │   │   │   └── Warnings.xcconfig
+│   │   │   ├── DebugProfile.entitlements
+│   │   │   ├── Info.plist
+│   │   │   ├── MainFlutterWindow.swift
+│   │   │   └── Release.entitlements
+│   │   ├── Runner.xcodeproj
+│   │   │   ├── project.pbxproj
+│   │   │   ├── project.xcworkspace
+│   │   │   │   └── xcshareddata
+│   │   │   │       └── IDEWorkspaceChecks.plist
+│   │   │   └── xcshareddata
+│   │   │       └── xcschemes
+│   │   │           └── Runner.xcscheme
+│   │   ├── Runner.xcworkspace
+│   │   │   ├── contents.xcworkspacedata
+│   │   │   └── xcshareddata
+│   │   │       └── IDEWorkspaceChecks.plist
+│   │   └── RunnerTests
+│   │       └── RunnerTests.swift
+│   ├── pubspec.lock
+│   ├── pubspec.yaml
+│   ├── README.md
+│   ├── run.sh
+│   ├── test
+│   │   ├── sms_parser_service_test.dart
+│   │   └── widget_test.dart
+│   ├── web
+│   │   ├── favicon.png
+│   │   ├── icons
+│   │   │   ├── Icon-192.png
+│   │   │   ├── Icon-512.png
+│   │   │   ├── Icon-maskable-192.png
+│   │   │   └── Icon-maskable-512.png
+│   │   ├── index.html
+│   │   └── manifest.json
+│   └── windows
+│       ├── CMakeLists.txt
+│       ├── flutter
+│       │   ├── CMakeLists.txt
+│       │   ├── ephemeral
+│       │   ├── generated_plugin_registrant.cc
+│       │   ├── generated_plugin_registrant.h
+│       │   └── generated_plugins.cmake
+│       └── runner
+│           ├── CMakeLists.txt
+│           ├── flutter_window.cpp
+│           ├── flutter_window.h
+│           ├── main.cpp
+│           ├── resource.h
+│           ├── resources
+│           │   └── app_icon.ico
+│           ├── runner.exe.manifest
+│           ├── Runner.rc
+│           ├── utils.cpp
+│           ├── utils.h
+│           ├── win32_window.cpp
+│           └── win32_window.h
+├── pocketpilot-backend
+│   ├── __pycache__
+│   │   └── main.cpython-311.pyc
+│   ├── core
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   │   ├── __init__.cpython-311.pyc
+│   │   │   ├── auth.cpython-311.pyc
+│   │   │   ├── config.cpython-311.pyc
+│   │   │   ├── database.cpython-311.pyc
+│   │   │   └── responses.cpython-311.pyc
+│   │   ├── auth.py
+│   │   ├── config.py
+│   │   ├── database.py
+│   │   └── responses.py
+│   ├── firebase-service-account.json
+│   ├── main.py
+│   ├── models
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   │   ├── __init__.cpython-311.pyc
+│   │   │   ├── autopay.cpython-311.pyc
+│   │   │   ├── transaction.cpython-311.pyc
+│   │   │   └── user.cpython-311.pyc
+│   │   ├── autopay.py
+│   │   ├── transaction.py
+│   │   └── user.py
+│   ├── requirements.txt
+│   └── routers
+│       ├── __init__.py
+│       ├── __pycache__
+│       │   ├── __init__.cpython-311.pyc
+│       │   ├── autopays.cpython-311.pyc
+│       │   ├── budget.cpython-311.pyc
+│       │   ├── notifications.cpython-311.pyc
+│       │   ├── savings.cpython-311.pyc
+│       │   ├── sms.cpython-311.pyc
+│       │   ├── transactions.cpython-311.pyc
+│       │   └── users.cpython-311.pyc
+│       ├── autopays.py
+│       ├── budget.py
+│       ├── notifications.py
+│       ├── savings.py
+│       ├── sms.py
+│       ├── transactions.py
+│       └── users.py
+├── README.md
+└── requirements.txt
+
+381 directories, 230 files

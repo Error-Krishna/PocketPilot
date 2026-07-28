@@ -10,15 +10,23 @@ class NotificationService {
     const InitializationSettings initSettings =
         InitializationSettings(android: androidSettings);
     await _plugin.initialize(initSettings);
+
+    // Android 13+ (API 33+) requires this runtime permission before any
+    // notification — including the persistent daily-limit one — will
+    // actually appear. Declaring POST_NOTIFICATIONS in the manifest alone
+    // is not enough; without this call .show() silently does nothing.
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
   }
 
   static Future<void> showDailyLimitNotification({
     required double dailyLimit,
     required double spentToday,
     required double savedToday,
+    bool isAwaitingFunds = false,
   }) async {
-    final remaining = dailyLimit - spentToday;
-    final status = remaining >= 0 ? '✅ Under limit' : '❌ Over limit';
     const androidDetails = AndroidNotificationDetails(
       'daily_limit_channel',
       'Daily Limit',
@@ -29,6 +37,19 @@ class NotificationService {
       autoCancel: false,
     );
     const details = NotificationDetails(android: androidDetails);
+
+    if (isAwaitingFunds) {
+      await _plugin.show(
+        0,
+        'Cycle complete',
+        'Waiting for your next pocket money to start a new cycle.',
+        details,
+      );
+      return;
+    }
+
+    final remaining = dailyLimit - spentToday;
+    final status = remaining >= 0 ? '✅ Under limit' : '❌ Over limit';
 
     await _plugin.show(
       0,

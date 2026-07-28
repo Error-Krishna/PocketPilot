@@ -4,11 +4,17 @@ import '../models/user.dart';
 import '../models/transaction.dart';
 import '../models/autopay.dart';
 import '../models/budget_summary.dart';
+import '../models/monthly_archive.dart';
+import '../models/spend_trend.dart';
 
 class ApiService {
+  // Pass the backend URL at run/build time, e.g.:
+  //   flutter run --dart-define=API_URL=http://<your-mac-ip>:8000/api/v1
+  // Falls back to localhost (works for iOS simulator only, not physical
+  // devices/Android emulator) if not provided.
   static const String baseUrl = String.fromEnvironment(
     'API_URL',
-    defaultValue: 'http://192.168.29.67:8000/api/v1',
+    defaultValue: 'http://127.0.0.1:8000/api/v1',
   );
 
   final Dio _dio = Dio(
@@ -59,24 +65,17 @@ class ApiService {
       }
 
       throw Exception('Registration failed');
-    } on DioException catch (e) {
-      print('REGISTER ERROR STATUS: ${e.response?.statusCode}');
-      print('REGISTER ERROR DATA: ${e.response?.data}');
+    } on DioException {
       rethrow;
     }
   }
 
   Future<User> updateUser(Map<String, dynamic> updates) async {
     try {
-      print('SENDING UPDATE: $updates');
-
       final res = await _dio.patch(
         '/users/me',
         data: updates,
       );
-
-      print('STATUS: ${res.statusCode}');
-      print('DATA: ${res.data}');
 
       if (res.data['success'] == true) {
         return User.fromJson(res.data['data']);
@@ -148,11 +147,24 @@ class ApiService {
     throw Exception('Failed to get budget summary');
   }
 
-  // FIX: Return a map with inserted/skipped counts
-  Future<Map<String, int>> syncSmsTransactions(
+  /// Simple day-by-day discretionary spend series for the quick-glance
+  /// trend card. [days] is clamped server-side to a sane range.
+  Future<List<SpendTrendPoint>> getSpendTrend({int days = 7}) async {
+    final res = await _dio.get('/budget/trend', queryParameters: {'days': days});
+    if (res.data['success'] == true) {
+      final series = res.data['data']['series'] as List;
+      return series.map((j) => SpendTrendPoint.fromJson(j)).toList();
+    }
+    throw Exception('Failed to get spend trend');
+  }
+
+  // FIX: Return a map with inserted/skipped counts, plus an optional
+  // reset-candidate transaction id when a credit matching the user's
+  // monthly_budget was detected as reset-eligible (see routers/sms.py).
+  Future<Map<String, dynamic>> syncSmsTransactions(
       List<Map<String, dynamic>> transactions) async {
     if (transactions.isEmpty) {
-      return {'inserted': 0, 'skipped': 0};
+      return {'inserted': 0, 'skipped': 0, 'resetCandidateTransactionId': null};
     }
 
     try {
@@ -169,12 +181,42 @@ class ApiService {
       return {
         'inserted': (data['inserted'] as num).toInt(),
         'skipped': (data['skipped'] as num).toInt(),
+        'resetCandidateTransactionId':
+            data['reset_candidate_transaction_id'] as String?,
       };
-    } on DioException catch (e) {
-      print('SMS SYNC ERROR STATUS: ${e.response?.statusCode}');
-      print('SMS SYNC ERROR DATA: ${e.response?.data}');
+    } on DioException {
       rethrow;
     }
+  }
+
+  /// Confirms or declines a detected monthly reset. On confirm, the
+  /// backend archives the ending cycle, rolls its savings into
+  /// lifetime_savings, and starts a fresh cycle from now.
+  Future<Map<String, dynamic>> confirmReset(
+      String transactionId, bool confirmed) async {
+    final res = await _dio.post(
+      '/reset/confirm',
+      data: {'transaction_id': transactionId, 'confirmed': confirmed},
+    );
+    if (res.data['success'] == true) {
+      return res.data['data'] as Map<String, dynamic>;
+    }
+    throw Exception('Failed to confirm reset');
+  }
+
+  /// Past cycle summaries plus the current lifetime savings total, for
+  /// the "last month" glance and history drill-down on the dashboard.
+  Future<(List<MonthlyArchive>, double)> getResetHistory() async {
+    final res = await _dio.get('/reset/history');
+    if (res.data['success'] == true) {
+      final data = res.data['data'] as Map<String, dynamic>;
+      final history = (data['history'] as List)
+          .map((j) => MonthlyArchive.fromJson(j))
+          .toList();
+      final lifetimeSavings = (data['lifetimeSavings'] as num).toDouble();
+      return (history, lifetimeSavings);
+    }
+    throw Exception('Failed to get reset history');
   }
 
   Future<List<SavingsGoal>> getSavingsGoals() async {
@@ -185,5 +227,80 @@ class ApiService {
           .toList();
     }
     throw Exception('Failed to get savings goals');
+  }
+
+  Future<SavingsGoal> createSavingsGoal(SavingsGoalCreate data) async {
+    final res = await _dio.post('/savings', data: data.toJson());
+    if (res.data['success'] == true) {
+      return SavingsGoal.fromJson(res.data['data']);
+    }
+    throw Exception('Failed to create savings goal');
+  }
+
+  Future<SavingsGoal> updateSavingsGoal(
+      String id, SavingsGoalUpdate data) async {
+    final res = await _dio.patch('/savings/$id', data: data.toJson());
+    if (res.data['success'] == true) {
+      return SavingsGoal.fromJson(res.data['data']);
+    }
+    throw Exception('Failed to update savings goal');
+  }
+
+  Future<void> deleteSavingsGoal(String id) async {
+    await _dio.delete('/savings/$id');
+  }
+
+  /// Free-text identifiers (e.g. "hdfc savings", "dad's account") the
+  /// classifier matches against SMS text to detect transfers between the
+  /// user's own accounts, keeping them out of discretionary spend.
+  Future<List<String>> getSelfAccounts() async {
+    final res = await _dio.get('/settings/self-accounts');
+    if (res.data['success'] == true) {
+      return List<String>.from(res.data['data']['accounts'] ?? []);
+    }
+    throw Exception('Failed to get self accounts');
+  }
+
+  Future<List<String>> setSelfAccounts(List<String> accounts) async {
+    final res = await _dio.put(
+      '/settings/self-accounts',
+      data: {'accounts': accounts},
+    );
+    if (res.data['success'] == true) {
+      return List<String>.from(res.data['data']['accounts'] ?? []);
+    }
+    throw Exception('Failed to update self accounts');
+  }
+
+  /// Transactions the rule-based classifier could not confidently place.
+  Future<List<Transaction>> getReviewQueue() async {
+    final res = await _dio.get('/review/queue');
+    if (res.data['success'] == true) {
+      return (res.data['data'] as List)
+          .map((j) => Transaction.fromJson(j))
+          .toList();
+    }
+    throw Exception('Failed to get review queue');
+  }
+
+  Future<int> getReviewQueueCount() async {
+    final res = await _dio.get('/review/queue/count');
+    if (res.data['success'] == true) {
+      return (res.data['data']['count'] as num).toInt();
+    }
+    throw Exception('Failed to get review queue count');
+  }
+
+  /// User confirms/corrects a transaction's class from the review queue.
+  Future<Transaction> confirmClassification(
+      String transactionId, TransactionClass txnClass) async {
+    final res = await _dio.patch(
+      '/review/$transactionId',
+      data: {'txn_class': txnClass.wireValue},
+    );
+    if (res.data['success'] == true) {
+      return Transaction.fromJson(res.data['data']);
+    }
+    throw Exception('Failed to confirm classification');
   }
 }

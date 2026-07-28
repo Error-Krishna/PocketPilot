@@ -24,8 +24,20 @@ async def connect_to_mongo() -> None:
                 sparse=True,
                 background=True,
             ),
+            # Review queue lookups: unclassified transactions awaiting user confirmation
+            db.transactions.create_index(
+                [("user_id", 1), ("classification_source", 1), ("date", -1)],
+                background=True,
+            ),
+            db.transactions.create_index(
+                [("user_id", 1), ("txn_class", 1)],
+                background=True,
+            ),
             db.autopays.create_index([("user_id", 1), ("is_active", 1)], background=True),
             db.users.create_index([("firebase_uid", 1)], unique=True, background=True),
+            db.monthly_archives.create_index(
+                [("user_id", 1), ("cycle_end", -1)], background=True
+            ),
         )
     except Exception as e:
         client = None

@@ -21,6 +21,11 @@ def _serialize_user(doc: dict) -> dict:
         phone=doc.get("phone"),
         monthly_budget=doc.get("monthly_budget"),
         budget_reset_date=doc.get("budget_reset_date"),
+        lifetime_savings=doc.get("lifetime_savings", 0),
+        last_reset_date=doc.get("last_reset_date"),
+        cycle_starting_balance=doc.get("cycle_starting_balance"),
+        last_known_bank_balance=doc.get("last_known_bank_balance"),
+        last_known_bank_balance_at=doc.get("last_known_bank_balance_at"),
         created_at=doc["created_at"],
         updated_at=doc["updated_at"],
     ).model_dump()
@@ -28,14 +33,10 @@ def _serialize_user(doc: dict) -> dict:
 
 @router.get("/me")
 async def get_current_user_profile(current_user: CurrentUser):
-    print("CURRENT UID:", current_user["uid"])
-
     db = get_database()
     user = await db.users.find_one(
         {"firebase_uid": current_user["uid"]}
     )
-
-    print("USER FOUND:", user)
 
     if not user:
         return error_response("User not found")
@@ -45,8 +46,6 @@ async def get_current_user_profile(current_user: CurrentUser):
 
 @router.patch("/me")
 async def update_current_user_profile(payload: UserUpdate, current_user: CurrentUser):
-    print("PATCH UID:", current_user["uid"])   
-    print("PATCH /users/me HIT")
     db = get_database()
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
