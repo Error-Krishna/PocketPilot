@@ -12,11 +12,26 @@ Thumbs.db
 *.iml
 
 # ==================================================
+# Environment Variables / Secrets
+# ==================================================
+.env
+.env.*
+!.env.example
+
+# Firebase server-side service account — never commit, contains a
+# private key. NOTE: google-services.json is intentionally NOT listed
+# here — that file only contains client-side Firebase config (API keys
+# meant to ship inside the app bundle), not a secret, and must stay
+# committed or Android builds break for anyone else who clones this repo.
+firebase-service-account.json
+
+# ==================================================
 # Python
 # ==================================================
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
 
 .venv/
 venv/
@@ -25,16 +40,8 @@ env/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-
-# ==================================================
-# Environment Variables / Secrets
-# ==================================================
-.env
-.env.*
-
-
-# Firebase service account
-firebase-service-account.json
+.coverage
+htmlcov/
 
 # ==================================================
 # Logs
@@ -48,35 +55,50 @@ firebase-service-account.json
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
-
+.pub/
 build/
+lib/generated_plugin_registrant.dart
 
 # ==================================================
 # Android
 # ==================================================
-**/.gradle/
-**/.kotlin/
-**/local.properties
-
-# Generated Android files
+**/android/.gradle/
+**/android/.kotlin/
+**/android/build/
+**/android/app/build/
+**/android/local.properties
+**/android/key.properties
 **/GeneratedPluginRegistrant.java
+
+*.jks
+*.keystore
 
 # ==================================================
 # iOS / macOS
 # ==================================================
-**/Pods/
-**/ephemeral/
+**/ios/Flutter/ephemeral/
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
 
-**/Flutter/Generated.xcconfig
-**/Flutter/flutter_export_environment.sh
+**/macos/Flutter/ephemeral/
+**/macos/Pods/
+**/macos/.symlinks/
 
-# Xcode
 DerivedData/
 
 # ==================================================
 # Linux / Windows Flutter Generated
 # ==================================================
+**/linux/flutter/ephemeral/
+**/windows/flutter/ephemeral/
 **/.plugin_symlinks/
+
+# ==================================================
+# Coverage
+# ==================================================
+coverage/
 
 # ==================================================
 # Temporary / Backup Files
@@ -84,14 +106,16 @@ DerivedData/
 *~
 *.tmp
 *.temp
+*.bak
+*.swp
 
-# Duplicate accidental files
+# Duplicate accidental files (macOS "keep both" naming pattern)
 * 2
 * 3
 * 4
 
 # ==================================================
-# Reports / Generated Files
+# Reports / Generated Files (stray analysis output, not project source)
 # ==================================================
 full_structure.txt
 file_sizes.txt
@@ -99,173 +123,4 @@ secrets_report.txt
 git_status.txt
 flutter_files.txt
 backend_files.txt
-
-# ==================================================
-# Coverage
-# ==================================================
-coverage/
-
-
-=========================
-
-Environment & Secrets
-
-=========================
-
-.env
-.env.*
-!.env.example
-
-firebase-service-account.json
-google-services.json
-GoogleService-Info.plist
-
-=========================
-
-Python
-
-=========================
-
-pycache/
-*.py[cod]
-*$py.class
-*.so
-
-.venv/
-venv/
-env/
-
-.pytest_cache/
-.mypy_cache/
-.coverage
-htmlcov/
-
-=========================
-
-FastAPI
-
-=========================
-
-*.log
-
-=========================
-
-Flutter / Dart
-
-=========================
-
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.packages
-.pub/
-build/
-
-Flutter generated files
-
-lib/generated_plugin_registrant.dart
-
-=========================
-
-Android
-
-=========================
-
-**/android/.gradle/
-**/android/.kotlin/
-**/android/build/
-
-local.properties
-*.jks
-*.keystore
-
-=========================
-
-iOS / macOS
-
-=========================
-
-**/ios/Flutter/ephemeral/
-**/ios/Pods/
-**/ios/.symlinks/
-
-**/macos/Flutter/ephemeral/
-**/macos/Pods/
-**/macos/.symlinks/
-
-=========================
-
-Linux / Windows
-
-=========================
-
-**/linux/flutter/ephemeral/
-**/windows/flutter/ephemeral/
-
-=========================
-
-IDEs
-
-=========================
-
-.idea/
-.vscode/
-*.iml
-
-=========================
-
-OS Files
-
-=========================
-
-.DS_Store
-Thumbs.db
-
-=========================
-
-Logs
-
-=========================
-
-.log
-flutter_.log
-
-=========================
-
-Backup Files
-
-=========================
-
-*.bak
-*~
-*.swp
-
-=========================
-
-Project Generated Files
-
-=========================
-
 folder_structure.txt
-
-=========================
-
-Duplicate Files Accidentally Created
-
-=========================
-
-*.tmp
-
-.dart_tool/
-
-.flutter-plugins
-
-.flutter-plugins-dependencies
-
-build/
-
-ios/Pods/
-
-android/.gradle/
-
-EOF
