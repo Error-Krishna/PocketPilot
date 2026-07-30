@@ -6,6 +6,7 @@ import '../models/autopay.dart';
 import '../models/budget_summary.dart';
 import '../models/monthly_archive.dart';
 import '../models/spend_trend.dart';
+import '../models/bank_account.dart';
 
 class ApiService {
   // Pass the backend URL at run/build time, e.g.:
@@ -302,5 +303,38 @@ class ApiService {
       return Transaction.fromJson(res.data['data']);
     }
     throw Exception('Failed to confirm classification');
+  }
+
+  // --- Bank accounts ---
+
+  Future<List<BankAccount>> getBankAccounts() async {
+    final res = await _dio.get('/bank-accounts');
+    if (res.data['success'] == true) {
+      return (res.data['data'] as List)
+          .map((j) => BankAccount.fromJson(j))
+          .toList();
+    }
+    throw Exception('Failed to get bank accounts');
+  }
+
+  Future<BankAccount> createBankAccount(BankAccountCreate data) async {
+    final res = await _dio.post('/bank-accounts', data: data.toJson());
+    if (res.data['success'] == true) {
+      return BankAccount.fromJson(res.data['data']);
+    }
+    throw Exception('Failed to create bank account');
+  }
+
+  Future<BankAccount> updateBankAccount(
+      String id, BankAccountUpdate data) async {
+    final res = await _dio.patch('/bank-accounts/$id', data: data.toJson());
+    if (res.data['success'] == true) {
+      return BankAccount.fromJson(res.data['data']);
+    }
+    throw Exception('Failed to update bank account');
+  }
+
+  Future<void> deleteBankAccount(String id) async {
+    await _dio.delete('/bank-accounts/$id');
   }
 }

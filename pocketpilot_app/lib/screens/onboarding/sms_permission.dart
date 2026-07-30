@@ -8,6 +8,7 @@ import 'package:telephony/telephony.dart';
 import '../../services/api_service.dart';
 import '../../services/sms_parser_service.dart';
 import '../../services/storage_service.dart';
+import '../../services/battery_optimization_service.dart';
 
 class SmsPermissionScreen extends StatefulWidget {
   const SmsPermissionScreen({super.key});
@@ -68,6 +69,9 @@ class _SmsPermissionScreenState extends State<SmsPermissionScreen> {
       await storage.setOnboardingCompleted(true);
 
       if (!mounted) return;
+      await _maybePromptBatteryExemption();
+
+      if (!mounted) return;
       context.go('/dashboard');
     } catch (_) {
       if (!mounted) return;
@@ -106,6 +110,39 @@ class _SmsPermissionScreenState extends State<SmsPermissionScreen> {
       );
     } catch (_) {
       // Non-fatal: sync will retry on next inbox scan.
+    }
+  }
+
+  Future<void> _maybePromptBatteryExemption() async {
+    final alreadyExempted =
+        await BatteryOptimizationService.isIgnoringBatteryOptimizations();
+    if (alreadyExempted || !mounted) return;
+
+    final shouldRequest = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Keep transaction detection reliable'),
+        content: const Text(
+          'Android may pause apps running in the background to save '
+          'battery. To make sure PocketPilot keeps detecting transactions '
+          'even when closed, allow it to run in the background on the '
+          'next screen.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Not now'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Allow'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldRequest == true) {
+      await BatteryOptimizationService.requestExemption();
     }
   }
 

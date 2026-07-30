@@ -8,6 +8,7 @@ from core.config import settings
 from core.database import close_mongo_connection, connect_to_mongo
 from routers import (
     autopays,
+    bank_accounts,
     budget,
     notifications,
     review,
@@ -61,6 +62,7 @@ app.include_router(sms.router, prefix=API_PREFIX)
 app.include_router(review.router, prefix=API_PREFIX)
 app.include_router(reset.router, prefix=API_PREFIX)
 app.include_router(settings_router.router, prefix=API_PREFIX)
+app.include_router(bank_accounts.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

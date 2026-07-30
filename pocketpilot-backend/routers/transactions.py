@@ -28,6 +28,8 @@ def _serialize_transaction(doc: dict) -> dict:
         txn_class=doc.get("txn_class", "discretionary"),
         classification_source=doc.get("classification_source", "user"),
         classification_confidence=doc.get("classification_confidence", 1.0),
+        account_id=doc.get("account_id"),
+        raw_sms=doc.get("raw_sms"),
     ).model_dump()
 
 

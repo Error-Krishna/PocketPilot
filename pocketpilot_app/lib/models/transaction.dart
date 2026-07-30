@@ -159,6 +159,8 @@ class Transaction {
   final TransactionClass txnClass;
   final ClassificationSource classificationSource;
   final double classificationConfidence;
+  final String? accountId;
+  final String? rawSms;
 
   Transaction({
     required this.id,
@@ -174,6 +176,8 @@ class Transaction {
     this.txnClass = TransactionClass.discretionary,
     this.classificationSource = ClassificationSource.user,
     this.classificationConfidence = 1.0,
+    this.accountId,
+    this.rawSms,
   });
 
   bool get needsReview => classificationSource == ClassificationSource.pending;
@@ -194,6 +198,8 @@ class Transaction {
             _classificationSourceFromJson(json['classification_source']),
         classificationConfidence:
             (json['classification_confidence'] as num?)?.toDouble() ?? 1.0,
+        accountId: json['account_id'],
+        rawSms: json['raw_sms'],
       );
 }
 

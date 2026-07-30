@@ -1,5 +1,7 @@
 import 'package:telephony/telephony.dart';
 import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ParsedTransaction {
@@ -50,6 +52,16 @@ class SmsParserService {
   static const int _maxFingerprintCacheSize = 2000;
   final Set<String> _processedFingerprints = <String>{};
 
+  // Bridges to the native foreground service + SMS receiver (see
+  // android/app/src/main/kotlin/.../SmsForegroundService.kt and
+  // SmsReceiver.kt). This is what makes SMS capture survive the app being
+  // fully closed — the old telephony-package onBackgroundMessage stub did
+  // nothing, so any SMS arriving while the app wasn't in the foreground
+  // was silently missed.
+  static const MethodChannel _nativeChannel =
+      MethodChannel('com.udhyogsaathi.pocketpilot/sms_service');
+  Timer? _drainTimer;
+
   final StreamController<ParsedTransaction> _parsedTransactionsController =
       StreamController<ParsedTransaction>.broadcast();
 
@@ -69,6 +81,7 @@ class SmsParserService {
   }
 
   void dispose() {
+    _drainTimer?.cancel();
     _parsedTransactionsController.close();
     _instance = null;
   }
@@ -102,9 +115,13 @@ class SmsParserService {
     'purchase',
     'purchased',
     'payment',
-    'txn',
-    'transaction',
     'dr.',
+    // NOTE: 'txn'/'transaction' deliberately excluded — these are
+    // direction-agnostic words that show up in reference-number
+    // boilerplate on BOTH debit and credit SMS (e.g. "transaction ref
+    // no. XXXXX"), so treating them as a debit signal caused genuine
+    // credits (pocket money, refunds) that also mention "transaction"
+    // in their boilerplate to be misclassified as debits.
   ];
 
   // Credit (money-in) signal keywords. Kept deliberately narrower than
@@ -120,6 +137,17 @@ class SmsParserService {
     'reversed',
     'reversal',
     'cashback',
+  ];
+
+  // Words that genuinely only ever mean "this is a debit," even when they
+  // also co-occur with a credit keyword due to shared SMS boilerplate.
+  // Used to break ties in favor of debit ONLY when one of these strong,
+  // unambiguous debit-specific words is present — not just any generic
+  // word that happens to appear on both debit and credit templates.
+  static const List<String> _strongDebitKeywords = [
+    'debited',
+    'withdrawn',
+    'dr.',
   ];
 
   static final Map<String, RegExp> _bankPatterns = {
@@ -205,8 +233,54 @@ class SmsParserService {
         );
         _emitParsed(parsed);
       },
-      onBackgroundMessage: telephonyBackgroundSmsHandler,
+      // Foreground-alive listening still uses the plugin's normal path
+      // above. The native foreground service + SmsReceiver (drained via
+      // _drainPendingFromNative) is what covers the app-closed case, which
+      // this plugin's own onBackgroundMessage never actually handled.
     );
+
+    try {
+      await _nativeChannel.invokeMethod('startService');
+    } catch (e) {
+      // Non-fatal: if the native service can't start (e.g. permission not
+      // yet granted), foreground-only capture and periodic syncInbox()
+      // still work as a fallback.
+    }
+
+    // Drain anything the native receiver queued up while the app was
+    // closed, then keep draining periodically so a long-open session still
+    // picks up messages the receiver captured (belt-and-suspenders with
+    // the plugin's own onNewMessage above).
+    await _drainPendingFromNative();
+    _drainTimer?.cancel();
+    _drainTimer = Timer.periodic(const Duration(seconds: 20), (_) async {
+      await _drainPendingFromNative();
+    });
+  }
+
+  Future<void> _drainPendingFromNative() async {
+    try {
+      final json = await _nativeChannel.invokeMethod<String>('drainPendingSms');
+      if (json == null || json.isEmpty) return;
+
+      final List<dynamic> entries = jsonDecode(json);
+      for (final entry in entries) {
+        final body = entry['body'] as String?;
+        final timestampMs = entry['timestamp'] as int?;
+        if (body == null) continue;
+
+        final parsed = parseSms(
+          body,
+          timestamp: timestampMs != null
+              ? DateTime.fromMillisecondsSinceEpoch(timestampMs)
+              : DateTime.now(),
+        );
+        _emitParsed(parsed);
+      }
+    } catch (e) {
+      // Non-fatal — next periodic drain or the syncInbox() catch-up pass
+      // will pick up anything missed here.
+    }
   }
 
   Future<int> syncInbox({int limit = 50}) async {
@@ -299,12 +373,18 @@ class SmsParserService {
     final isDebit = _debitKeywords.any((kw) => lower.contains(kw));
     final isCredit = _creditKeywords.any((kw) => lower.contains(kw));
 
-    // Must contain either a debit or credit signal. If both match (some
-    // bank templates reuse words like "transaction"), prefer debit since
-    // that's the more common/reliable signal in Indian bank SMS templates.
+    // Must contain either a debit or credit signal.
     if (!isDebit && !isCredit) return null;
 
-    final treatAsCredit = isCredit && !isDebit;
+    // If both match, this is almost always shared boilerplate (e.g. a
+    // credit SMS whose reference-number text also matches a soft debit
+    // word) rather than genuine ambiguity. Only let debit win the tie when
+    // a *strong*, direction-specific debit word is present — otherwise
+    // trust the credit signal, since credit keywords here are already the
+    // narrower, more deliberate list.
+    final hasStrongDebitSignal =
+        _strongDebitKeywords.any((kw) => lower.contains(kw));
+    final treatAsCredit = isCredit && !(isDebit && hasStrongDebitSignal);
 
     final amount = treatAsCredit
         ? _extractCreditAmount(normalized)
@@ -407,8 +487,4 @@ class SmsParserService {
     _instance?._parsedTransactionsController.close();
     _instance = null;
   }
-}
-
-void telephonyBackgroundSmsHandler(SmsMessage message) {
-  // Background handler – minimal as per plugin requirements
 }

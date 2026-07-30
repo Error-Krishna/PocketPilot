@@ -37,6 +37,36 @@ def _extract_bank_balance(raw_sms: str | None) -> float | None:
     except ValueError:
         return None
 
+
+def _match_account(raw_sms: str | None, bank_accounts: list[dict]) -> str | None:
+    """Attribute an SMS to one of the user's registered bank accounts by
+    matching its bank_name, last_four (as "...1234"/"x1234"-style
+    fragments), or explicit sms_hints against the raw SMS text. Returns the
+    first confident match; ambiguous/no-match returns None rather than
+    guessing, since a wrong account attribution is worse than none.
+    """
+    if not raw_sms:
+        return None
+    text = raw_sms.lower()
+
+    for account in bank_accounts:
+        last_four = account.get("last_four")
+        if last_four and last_four in text:
+            return str(account["_id"])
+
+    for account in bank_accounts:
+        for hint in account.get("sms_hints", []):
+            if hint and hint in text:
+                return str(account["_id"])
+
+    for account in bank_accounts:
+        bank_name = (account.get("bank_name") or "").lower()
+        if bank_name and bank_name in text:
+            return str(account["_id"])
+
+    return None
+
+
 # Matched within this tolerance of monthly_budget to count as "looks like
 # pocket money" — SMS amounts are sometimes off by a rupee or two due to
 # rounding in how the student describes their allowance vs. what actually
@@ -98,7 +128,17 @@ async def sync_sms_transactions(payload: SmsSyncPayload, current_user: CurrentUs
     autopay_names = [a["name"] for a in active_autopays if a.get("name")]
 
     user_settings = await db.settings.find_one({"user_id": user_id, "type": "self_accounts"})
-    self_accounts = (user_settings or {}).get("accounts", [])
+    self_accounts = list((user_settings or {}).get("accounts", []))
+
+    # Registered bank accounts extend self-transfer detection automatically
+    # — if the user has two of their own accounts registered, a transfer
+    # between them should be recognized without needing the separate
+    # free-text self_accounts setting to be filled in redundantly.
+    bank_accounts = await db.bank_accounts.find({"user_id": user_id}).to_list(length=None)
+    for account in bank_accounts:
+        if account.get("bank_name"):
+            self_accounts.append(account["bank_name"].lower())
+        self_accounts.extend(account.get("sms_hints", []))
 
     for txn in payload.transactions:
         fingerprint = txn.sms_fingerprint or txn.raw_sms
@@ -147,6 +187,7 @@ async def sync_sms_transactions(payload: SmsSyncPayload, current_user: CurrentUs
             "txn_class": result.txn_class.value,
             "classification_source": result.source.value,
             "classification_confidence": result.confidence,
+            "account_id": _match_account(txn.raw_sms, bank_accounts),
             "date": txn.timestamp,
             "created_at": now,
             "updated_at": now,

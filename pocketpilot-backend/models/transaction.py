@@ -54,6 +54,14 @@ class TransactionBase(BaseModel):
     txn_class: TransactionClass = TransactionClass.DISCRETIONARY
     classification_source: ClassificationSource = ClassificationSource.USER
     classification_confidence: float = Field(default=1.0, ge=0, le=1)
+    # Which of the user's registered bank accounts this transaction came
+    # from/went to. Optional since older transactions predate multi-account
+    # support, and manual entries may not specify one.
+    account_id: Optional[str] = None
+    # Original SMS text, when this transaction came from SMS parsing.
+    # Surfaced in the transaction detail view so the user can see exactly
+    # what the bank actually said, not just our parsed interpretation.
+    raw_sms: Optional[str] = None
 
 
 class TransactionCreate(TransactionBase):
@@ -69,6 +77,7 @@ class TransactionUpdate(BaseModel):
     txn_class: Optional[TransactionClass] = None
     classification_source: Optional[ClassificationSource] = None
     classification_confidence: Optional[float] = Field(None, ge=0, le=1)
+    account_id: Optional[str] = None
 
 
 class TransactionResponse(TransactionBase):

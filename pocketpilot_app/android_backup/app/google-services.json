@@ -1,0 +1,98 @@
+{
+  "project_info": {
+    "project_number": "539618708389",
+    "project_id": "pocketpilot-16670",
+    "storage_bucket": "pocketpilot-16670.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:539618708389:android:b2038ec502b5d17221364c",
+        "android_client_info": {
+          "package_name": "com.pocketpilot.pocketpilot_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "539618708389-30gectqhgtg5k5ur5v0rnrn60she0hrp.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pocketpilot.pocketpilot_app",
+            "certificate_hash": "4a1a17adbd63131aa5cf446971d6a6dcba92826c"
+          }
+        },
+        {
+          "client_id": "539618708389-s0uc6ho3kgalop8m2rvakbanp9g0snpt.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC52KTMvTp2vCp4aSddWQFU26pJYAZhA4c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "539618708389-s0uc6ho3kgalop8m2rvakbanp9g0snpt.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "539618708389-9pkfp6bie5v3e1ihonhnlg5h5is0u81f.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.pocketpilot.pocketpilotApp.RunnerTests"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:539618708389:android:ff18021813b5d33921364c",
+        "android_client_info": {
+          "package_name": "com.udhyogsaathi.pocketpilot"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "539618708389-qokq0r5dib7v84ltclheu986n8psspmf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.udhyogsaathi.pocketpilot",
+            "certificate_hash": "a40b33757fe379c1980758ae1da59f697ca5d178"
+          }
+        },
+        {
+          "client_id": "539618708389-s0uc6ho3kgalop8m2rvakbanp9g0snpt.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC52KTMvTp2vCp4aSddWQFU26pJYAZhA4c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "539618708389-s0uc6ho3kgalop8m2rvakbanp9g0snpt.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "539618708389-9pkfp6bie5v3e1ihonhnlg5h5is0u81f.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.pocketpilot.pocketpilotApp.RunnerTests"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

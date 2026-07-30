@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/storage_service.dart';
 import '../services/api_service.dart';
+import '../services/battery_optimization_service.dart';
 import '../models/user.dart';
+
+const _nativeSmsServiceChannel =
+    MethodChannel('com.udhyogsaathi.pocketpilot/sms_service');
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -16,11 +21,19 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   Future<User>? _userFuture;
   Future<List<String>>? _selfAccountsFuture;
+  bool _batteryExempted = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _checkBatteryStatus();
+  }
+
+  Future<void> _checkBatteryStatus() async {
+    final exempted =
+        await BatteryOptimizationService.isIgnoringBatteryOptimizations();
+    if (mounted) setState(() => _batteryExempted = exempted);
   }
 
   void _load() {
@@ -225,8 +238,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const Divider(),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text('RELIABILITY',
+                    style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ),
+              ListTile(
+                leading: Icon(
+                  _batteryExempted
+                      ? Icons.battery_charging_full
+                      : Icons.battery_alert,
+                  color: _batteryExempted ? Colors.green : Colors.orange,
+                ),
+                title: const Text('Background transaction detection'),
+                subtitle: Text(
+                  _batteryExempted
+                      ? 'Protected — PocketPilot can detect SMS even when closed'
+                      : 'Not protected — tap to allow background running',
+                ),
+                onTap: _batteryExempted
+                    ? null
+                    : () async {
+                        await BatteryOptimizationService.requestExemption();
+                        _checkBatteryStatus();
+                      },
+              ),
+              const Divider(),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
                 child: Text('MANAGE',
                     style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ),
+              ListTile(
+                leading: const Icon(Icons.account_balance),
+                title: const Text('Bank accounts'),
+                subtitle: const Text('Manage accounts, track which bank each transaction is from'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/bank-accounts'),
               ),
               ListTile(
                 leading: const Icon(Icons.savings),
@@ -265,6 +311,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 leading: const Icon(Icons.logout),
                 title: const Text('Sign out'),
                 onTap: () async {
+                  // Stop the native foreground SMS-watching service — it
+                  // shouldn't keep running (or showing its notification)
+                  // for a signed-out user.
+                  try {
+                    await _nativeSmsServiceChannel.invokeMethod('stopService');
+                  } catch (_) {
+                    // Non-fatal — service will simply keep running until
+                    // the OS reclaims it if this call fails for any reason.
+                  }
                   await auth.signOut();
                   await storage.setOnboardingCompleted(false);
                   if (context.mounted) context.go('/welcome');

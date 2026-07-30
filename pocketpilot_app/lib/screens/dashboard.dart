@@ -14,6 +14,7 @@ import '../widgets/spend_trend_card.dart';
 import '../widgets/transaction_tile.dart';
 import '../models/transaction.dart';
 import '../models/budget_summary.dart';
+import '../models/bank_account.dart';
 import '../models/monthly_archive.dart';
 import '../models/spend_trend.dart';
 import '../models/user.dart';
@@ -244,7 +245,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   snapshot.hasData ? snapshot.data![4] as int : 0;
               if (reviewCount <= 0) return const SizedBox.shrink();
               return IconButton(
-                onPressed: () => context.go('/review'),
+                onPressed: () => context.push('/review'),
                 icon: Badge(
                   label: Text('$reviewCount'),
                   child: const Icon(Icons.rule_folder_outlined),
@@ -254,7 +255,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             },
           ),
           IconButton(
-            onPressed: () => context.go('/settings'),
+            onPressed: () => context.push('/settings'),
             icon: const Icon(Icons.settings),
           ),
         ],
@@ -324,6 +325,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 BalanceCard(
                   userName: user.displayName,
                   monthlyBudget: summary.monthlyBudget,
+                  remainingBalance: summary.remainingBalance,
+                  remainingDays: summary.remainingDays,
                   lastKnownBankBalance: summary.lastKnownBankBalance,
                   lastKnownBankBalanceAt: summary.lastKnownBankBalanceAt,
                 ),
@@ -341,6 +344,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   spentThisMonth: summary.spentThisMonth,
                   monthlyBudget: summary.monthlyBudget,
                   remainingDays: summary.remainingDays,
+                  onTap: () {
+                    final cycleStart = summary.cycleStart;
+                    final spendThisCycle = transactions.where((t) {
+                      final inCycle = cycleStart == null ||
+                          !t.date.isBefore(cycleStart);
+                      final isDiscretionary =
+                          t.txnClass == TransactionClass.discretionary ||
+                              t.txnClass == TransactionClass.refund;
+                      final isConfirmed = !t.needsReview;
+                      return inCycle && isDiscretionary && isConfirmed;
+                    }).toList();
+                    context.push('/filtered-transactions', extra: {
+                      'title': 'Spent This Month',
+                      'transactions': spendThisCycle,
+                      'total': summary.spentThisMonth,
+                    });
+                  },
                 ),
                 const SizedBox(height: 16),
 

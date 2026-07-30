@@ -17,6 +17,11 @@ import 'services/notification_service.dart';
 import 'screens/autopays.dart';
 import 'screens/settings.dart';
 import 'screens/savings_goals.dart';
+import 'screens/bank_accounts.dart';
+import 'screens/transaction_detail.dart';
+import 'screens/filtered_transactions.dart';
+import 'models/transaction.dart';
+import 'models/bank_account.dart';
 import 'services/auth_service.dart';
 import 'services/api_service.dart';
 import 'services/storage_service.dart';
@@ -103,6 +108,32 @@ class _AppRouterState extends State<_AppRouter> {
           builder: (_, __) => const SavingsGoalsScreen(),
         ),
         GoRoute(
+          path: '/bank-accounts',
+          builder: (_, __) => const BankAccountsScreen(),
+        ),
+        GoRoute(
+          path: '/transaction-detail',
+          builder: (_, state) {
+            final extra = state.extra as Map<String, dynamic>?;
+            return TransactionDetailScreen(
+              transaction: extra!['transaction'] as Transaction,
+              account: extra['account'] as BankAccount?,
+            );
+          },
+        ),
+        GoRoute(
+          path: '/filtered-transactions',
+          builder: (_, state) {
+            final extra = state.extra as Map<String, dynamic>?;
+            return FilteredTransactionsScreen(
+              title: extra?['title'] as String? ?? 'Transactions',
+              transactions:
+                  (extra?['transactions'] as List<Transaction>?) ?? const [],
+              total: (extra?['total'] as double?) ?? 0,
+            );
+          },
+        ),
+        GoRoute(
           path: '/review',
           builder: (_, __) => const ReviewQueueScreen(),
         ),
@@ -181,16 +212,25 @@ class _SplashScreenState extends State<_SplashScreen> {
 
   Future<void> _check() async {
     final auth = context.read<AuthService>();
-    final storage = context.read<StorageService>();
+    final api = context.read<ApiService>();
     final isLoggedIn = await auth.isSignedIn();
     if (!mounted) return;
     if (!isLoggedIn) {
       context.go('/welcome');
       return;
     }
-    final onboardingDone = await storage.getOnboardingCompleted();
-    if (!mounted) return;
-    context.go(onboardingDone ? '/dashboard' : '/onboarding/budget');
+
+    // Source of truth is the backend, not local storage — local flags get
+    // wiped on sign-out/reinstall, but a returning user's setup already
+    // exists on the server. See welcome.dart for the matching sign-in fix.
+    try {
+      final user = await api.getCurrentUser();
+      if (!mounted) return;
+      context.go(user.monthlyBudget != null ? '/dashboard' : '/onboarding/budget');
+    } catch (_) {
+      if (!mounted) return;
+      context.go('/welcome');
+    }
   }
 
   @override
