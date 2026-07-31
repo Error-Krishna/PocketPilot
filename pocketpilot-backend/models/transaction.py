@@ -67,6 +67,12 @@ class TransactionBase(BaseModel):
     # screen as "why was this classified this way", so a wrong guess is
     # obvious and explainable rather than a silent black box.
     classification_rule: Optional[str] = None
+    # True when this transaction pushed that day's discretionary spend
+    # above the flat daily_limit and the user hasn't yet decided how to
+    # absorb the overage (savings / reduce future days / hybrid / treat as
+    # an emergency exception). See routers/budget.py overage endpoints.
+    overage_pending: bool = False
+    overage_resolved_at: Optional[datetime] = None
 
 
 class TransactionCreate(TransactionBase):

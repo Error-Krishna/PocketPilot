@@ -17,6 +17,18 @@ class BudgetUpdate(BaseModel):
     category_limits: dict[str, float] = Field(default_factory=dict)
 
 
+class OverageResolvePayload(BaseModel):
+    transaction_id: str = Field(..., min_length=1)
+    # "exception": reclassify as ONE_TIME_EXCEPTION, removing it from daily
+    #   math entirely (it still reduces the cycle's available balance).
+    # "savings": draw the overage from banked_daily_savings.
+    # "reduce_daily": spread the overage across remaining cycle days by
+    #   increasing daily_limit_adjustment.
+    # "hybrid": split between savings and reduce_daily per amount_from_savings.
+    resolution: str = Field(..., pattern="^(exception|savings|reduce_daily|hybrid)$")
+    amount_from_savings: float = Field(0, ge=0)
+
+
 async def _get_user_id(current_user: CurrentUser) -> str:
     db = get_database()
     user = await db.users.find_one({"firebase_uid": current_user["uid"]})
@@ -241,6 +253,91 @@ async def get_spend_trend(current_user: CurrentUser, days: int = 7):
     return success_response({"days": days, "series": series})
 
 
+def _sum_discretionary_spend_for_range(
+    db_transactions: list[dict], range_start: datetime, range_end: datetime
+) -> float:
+    """Discretionary spend within [range_start, range_end), reusing the
+    same classification-aware filter as _sum_discretionary_spend but
+    scoped to an arbitrary day — used by the daily rollover to compute
+    exactly how much a single past day spent, independent of the
+    caller's own date filtering.
+    """
+    scoped = [
+        doc
+        for doc in db_transactions
+        if range_start <= _as_utc_datetime(doc["date"]) < range_end
+    ]
+    return max(0.0, _sum_discretionary_spend(scoped))
+
+
+async def _apply_daily_rollover(
+    db, user: dict, cycle_start: datetime, daily_limit: float, today: datetime
+) -> float:
+    """Bank any fully-elapsed days since the last rollover into
+    banked_daily_savings, so "unused daily limit" becomes a durable saved
+    amount at midnight rather than silently inflating tomorrow's limit
+    (that dynamic-redistribution behavior is deliberately NOT what this
+    flat-daily-limit model does — see budget.py module docstring above).
+
+    Lazy/idempotent by design: there's no server-side midnight cron, so
+    this runs on-demand whenever the summary is fetched and catches up on
+    every day that's fully elapsed but not yet banked — whether the user
+    opened the app yesterday or once a week. last_rollover_date tracks the
+    boundary so a day is never banked twice.
+    """
+    user_id = str(user["_id"])
+    today_start = today.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    last_rollover = user.get("last_rollover_date")
+    last_rollover = _as_utc_datetime(last_rollover) or cycle_start
+    rollover_from = max(last_rollover, cycle_start).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    if rollover_from >= today_start:
+        # Nothing has fully elapsed since the last rollover yet.
+        return float(user.get("banked_daily_savings") or 0)
+
+    # Pull every transaction across the full span being rolled over in one
+    # query, then bucket per day in Python — cheaper than one query per day
+    # for a user who's been away a while.
+    span_transactions = await db.transactions.find(
+        {
+            "user_id": user_id,
+            "date": {"$gte": rollover_from, "$lt": today_start},
+        }
+    ).to_list(length=None)
+
+    banked_delta = 0.0
+    cursor = rollover_from
+    while cursor < today_start:
+        day_end = cursor + timedelta(days=1)
+        spent_that_day = _sum_discretionary_spend_for_range(
+            span_transactions, cursor, day_end
+        )
+        # Overspending a day never claws back from savings — only unused
+        # allowance banks, floored at zero.
+        banked_delta += max(0.0, daily_limit - spent_that_day)
+        cursor = day_end
+
+    new_banked_total = float(user.get("banked_daily_savings") or 0) + banked_delta
+
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {
+            "$set": {
+                "banked_daily_savings": new_banked_total,
+                "last_rollover_date": today_start,
+            }
+        },
+    )
+    # Keep the in-memory doc consistent for the rest of this request.
+    user["banked_daily_savings"] = new_banked_total
+    user["last_rollover_date"] = today_start
+
+    return new_banked_total
+
+
 @router.get("/summary")
 async def get_budget_summary(current_user: CurrentUser):
     user_id = await _get_user_id(current_user)
@@ -307,7 +404,28 @@ async def get_budget_summary(current_user: CurrentUser):
     spent_this_month = max(0.0, spent_this_month_signed)
 
     remaining_days = max(1, (next_reset_date.date() - today.date()).days)
-    daily_limit = remaining_balance / remaining_days
+    days_elapsed = max(1, (today.date() - cycle_start.date()).days + 1)
+    total_cycle_days = days_elapsed + remaining_days
+    # Flat daily limit: a fixed amount per day for the whole cycle, NOT a
+    # dynamic remaining-balance-over-remaining-days figure. Per-day
+    # underspend is banked into savings at rollover (see
+    # _apply_daily_rollover) rather than silently raising tomorrow's
+    # limit — that's the deliberate behavior change from the old dynamic
+    # model, so a day's leftover shows up as "you saved ₹X" instead of a
+    # bigger number the user never explicitly sees.
+    daily_limit_base = cycle_base_amount / total_cycle_days if total_cycle_days else 0.0
+    # daily_limit_adjustment accumulates whenever the user resolves a
+    # "this went over today's limit" alert by choosing to reduce future
+    # days rather than draw from savings (see POST /budget/overage/resolve).
+    # It's a straight per-day subtraction, not re-derived from remaining
+    # balance, so multiple overage resolutions across a cycle compound
+    # predictably rather than the math shifting underneath a prior choice.
+    daily_limit_adjustment = float(user.get("daily_limit_adjustment") or 0)
+    daily_limit = max(0.0, daily_limit_base - daily_limit_adjustment)
+
+    banked_daily_savings = await _apply_daily_rollover(
+        db, user, cycle_start, daily_limit, today
+    )
 
     day_start = today.replace(hour=0, minute=0, second=0, microsecond=0)
     day_end = day_start + timedelta(days=1)
@@ -327,17 +445,18 @@ async def get_budget_summary(current_user: CurrentUser):
         )
     )
     saved_today = max(0, daily_limit - spent_today)
-    # Saved so far this cycle: how much of the budget allotted for days
-    # already elapsed was NOT spent. Elapsed days is at least 1 (today
-    # counts), and we use remaining_balance/available_balance rather than
-    # daily_limit*elapsed to stay consistent even if daily_limit shifted
-    # mid-cycle (e.g. after a one-time exception).
-    days_elapsed = max(1, (today.date() - cycle_start.date()).days + 1)
-    total_cycle_days = days_elapsed + remaining_days
-    budget_for_elapsed_days = (
-        (available_balance / total_cycle_days) * days_elapsed if total_cycle_days else 0
-    )
-    saved_this_month = max(0.0, budget_for_elapsed_days - spent_this_month)
+    # Any transaction today still awaiting an overage decision — surfaced
+    # so the dashboard can show the alert even if the user missed the
+    # in-the-moment prompt (e.g. app was closed when the SMS arrived).
+    pending_overage_transaction_ids = [
+        str(doc["_id"]) for doc in today_transactions if doc.get("overage_pending")
+    ]
+    # Saved so far this cycle now includes both (a) today's not-yet-banked
+    # unused allowance (saved_today, banked at the next rollover) and
+    # (b) every already-banked day since cycle start. This replaces the
+    # old dynamic-redistribution estimate, which no longer matches how
+    # daily_limit behaves under the flat-limit model.
+    saved_this_month = banked_daily_savings + saved_today
     lifetime_savings = float(user.get("lifetime_savings") or 0)
 
     # "Waiting for pocket money" state: cycle is genuinely exhausted
@@ -373,9 +492,213 @@ async def get_budget_summary(current_user: CurrentUser):
             "needsReviewAmount": needs_review_amount,
             "isAwaitingFunds": is_awaiting_funds,
             "cycleStartingBalance": cycle_starting_balance,
+            "bankedDailySavings": banked_daily_savings,
+            "dailyLimitAdjustment": daily_limit_adjustment,
+            "pendingOverageTransactionIds": pending_overage_transaction_ids,
             "lastKnownBankBalance": last_known_bank_balance,
             "lastKnownBankBalanceAt": last_known_bank_balance_at.isoformat()
             if last_known_bank_balance_at
             else None,
+        }
+    )
+
+
+async def _get_overage_context(db, user: dict, transaction_id: str) -> dict:
+    """Shared setup for preview/resolve: loads the transaction, confirms
+    it's a genuine same-day overage, and computes the current daily_limit
+    and how much of today's spend exceeds it. Returns None if the
+    transaction can't be found — a stale or already-resolved transaction_id
+    should be a clear no-op, not silently charged against the wrong day.
+    """
+    user_id = str(user["_id"])
+    txn = await db.transactions.find_one({"_id": ObjectId(transaction_id), "user_id": user_id})
+    if not txn:
+        return None
+
+    monthly_budget = float(user.get("monthly_budget") or 0)
+    cycle_starting_balance = user.get("cycle_starting_balance")
+    cycle_base_amount = (
+        float(cycle_starting_balance) if cycle_starting_balance is not None else monthly_budget
+    )
+    budget_reset_raw = user.get("budget_reset_date")
+    account_created_at = user.get("created_at") or datetime.now(timezone.utc)
+    last_reset_date = user.get("last_reset_date")
+    today = datetime.now(timezone.utc)
+    cycle_start, next_reset_date = _cycle_bounds(
+        budget_reset_raw, last_reset_date, account_created_at, today
+    )
+
+    remaining_days = max(1, (next_reset_date.date() - today.date()).days)
+    days_elapsed = max(1, (today.date() - cycle_start.date()).days + 1)
+    total_cycle_days = days_elapsed + remaining_days
+    daily_limit_base = cycle_base_amount / total_cycle_days if total_cycle_days else 0.0
+    daily_limit_adjustment = float(user.get("daily_limit_adjustment") or 0)
+    daily_limit = max(0.0, daily_limit_base - daily_limit_adjustment)
+
+    day_start = today.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = day_start + timedelta(days=1)
+    today_transactions = await db.transactions.find(
+        {"user_id": user_id, "date": {"$gte": day_start, "$lt": day_end}}
+    ).to_list(length=None)
+    spent_today = max(0.0, _sum_discretionary_spend(today_transactions))
+    overage = max(0.0, spent_today - daily_limit)
+
+    return {
+        "txn": txn,
+        "daily_limit": daily_limit,
+        "daily_limit_base": daily_limit_base,
+        "daily_limit_adjustment": daily_limit_adjustment,
+        "overage": overage,
+        "remaining_days": remaining_days,
+        "banked_daily_savings": float(user.get("banked_daily_savings") or 0),
+    }
+
+
+def _preview_split(ctx: dict, amount_from_savings: float) -> dict:
+    """Computes the requested split for the overage preview UI.
+    amount_from_savings is clamped to [0, overage] so a caller can't
+    request covering more than the actual overage from savings, or a
+    negative amount.
+    """
+    overage = ctx["overage"]
+    remaining_days = ctx["remaining_days"]
+    banked = ctx["banked_daily_savings"]
+    daily_limit_base = ctx["daily_limit_base"]
+    daily_limit_adjustment = ctx["daily_limit_adjustment"]
+
+    amount_from_savings = max(0.0, min(amount_from_savings, overage))
+    amount_from_daily = overage - amount_from_savings
+
+    # Spreading amount_from_daily across remaining_days (not remaining_days
+    # + today, since today's overage already happened — only future days
+    # can absorb a reduction).
+    per_day_reduction = amount_from_daily / remaining_days if remaining_days else 0.0
+    new_daily_limit = max(
+        0.0, daily_limit_base - daily_limit_adjustment - per_day_reduction
+    )
+    new_banked_savings = max(0.0, banked - amount_from_savings)
+
+    return {
+        "amountFromSavings": amount_from_savings,
+        "amountFromDailyReduction": amount_from_daily,
+        "newDailyLimit": new_daily_limit,
+        "newBankedSavings": new_banked_savings,
+        "perDayReduction": per_day_reduction,
+    }
+
+
+@router.get("/overage/preview")
+async def preview_overage_resolution(
+    current_user: CurrentUser, transaction_id: str, amount_from_savings: float = 0
+):
+    """Live preview for the overage-resolution slider: given a candidate
+    split between savings and reducing future days, returns what the new
+    daily limit and savings figures would become — WITHOUT persisting
+    anything. The frontend calls this on every slider move; only
+    /overage/resolve actually commits a choice.
+    """
+    db = get_database()
+    user = await db.users.find_one({"firebase_uid": current_user["uid"]})
+    if not user:
+        return error_response("User not found")
+
+    ctx = await _get_overage_context(db, user, transaction_id)
+    if ctx is None:
+        return error_response("Transaction not found")
+
+    all_savings = _preview_split(ctx, ctx["overage"])
+    all_daily = _preview_split(ctx, 0.0)
+    requested = _preview_split(ctx, amount_from_savings)
+
+    return success_response(
+        {
+            "overage": ctx["overage"],
+            "currentDailyLimit": ctx["daily_limit"],
+            "currentBankedSavings": ctx["banked_daily_savings"],
+            "allFromSavings": all_savings,
+            "allFromReduceDaily": all_daily,
+            "requestedSplit": requested,
+        }
+    )
+
+
+@router.post("/overage/resolve")
+async def resolve_overage(payload: OverageResolvePayload, current_user: CurrentUser):
+    """Commits how a same-day overage gets absorbed. Always clears
+    overage_pending on the transaction regardless of resolution, so it
+    stops being surfaced as a pending alert either way.
+    """
+    db = get_database()
+    user = await db.users.find_one({"firebase_uid": current_user["uid"]})
+    if not user:
+        return error_response("User not found")
+
+    ctx = await _get_overage_context(db, user, payload.transaction_id)
+    if ctx is None:
+        return error_response("Transaction not found")
+
+    now = datetime.now(timezone.utc)
+    txn = ctx["txn"]
+
+    if payload.resolution == "exception":
+        # Reclassifying removes it from daily/discretionary math entirely
+        # (see _sum_discretionary_spend) — it still reduces the cycle's
+        # available_balance via _sum_one_time_exceptions, so the plan
+        # stays honest, it just stops distorting TODAY's number.
+        await db.transactions.update_one(
+            {"_id": txn["_id"]},
+            {
+                "$set": {
+                    "txn_class": "one_time_exception",
+                    "classification_source": "user",
+                    "classification_confidence": 1.0,
+                    "overage_pending": False,
+                    "overage_resolved_at": now,
+                    "updated_at": now,
+                },
+                "$unset": {"classification_rule": ""},
+            },
+        )
+        return success_response({"resolution": "exception"})
+
+    # For savings / reduce_daily / hybrid, determine the actual split.
+    if payload.resolution == "savings":
+        amount_from_savings = ctx["overage"]
+    elif payload.resolution == "reduce_daily":
+        amount_from_savings = 0.0
+    else:  # hybrid
+        amount_from_savings = payload.amount_from_savings
+
+    split = _preview_split(ctx, amount_from_savings)
+
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {
+            "$set": {
+                "banked_daily_savings": split["newBankedSavings"],
+                "daily_limit_adjustment": ctx["daily_limit_adjustment"]
+                + split["perDayReduction"],
+                "updated_at": now,
+            }
+        },
+    )
+    await db.transactions.update_one(
+        {"_id": txn["_id"]},
+        {
+            "$set": {
+                "overage_pending": False,
+                "overage_resolved_at": now,
+                "updated_at": now,
+            }
+        },
+    )
+
+    return success_response(
+        {
+            "resolution": payload.resolution,
+            "amountFromSavings": split["amountFromSavings"],
+            "amountFromDailyReduction": split["amountFromDailyReduction"],
+            "newDailyLimit": split["newDailyLimit"],
+            "newBankedSavings": split["newBankedSavings"],
         }
     )

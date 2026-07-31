@@ -5,6 +5,7 @@ class DailyLimitCard extends StatelessWidget {
   final double dailyLimit;
   final double savedToday;
   final double incomeToday;
+  final double bankedDailySavings;
   final bool isAwaitingFunds;
 
   const DailyLimitCard({
@@ -12,6 +13,7 @@ class DailyLimitCard extends StatelessWidget {
     required this.dailyLimit,
     required this.savedToday,
     required this.incomeToday,
+    this.bankedDailySavings = 0,
     this.isAwaitingFunds = false,
   });
 
@@ -61,6 +63,11 @@ class DailyLimitCard extends StatelessWidget {
               'Today’s Safe Limit',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
+            const SizedBox(height: 4),
+            Text(
+              'Resets fresh every day at midnight',
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+            ),
             const SizedBox(height: 8),
             Text(
               NumberFormat.currency(symbol: '₹', decimalDigits: 0)
@@ -80,6 +87,22 @@ class DailyLimitCard extends StatelessWidget {
               'Income today: ${NumberFormat.currency(symbol: '₹', decimalDigits: 0).format(incomeToday)}',
               style: TextStyle(color: Colors.grey.shade400),
             ),
+            if (bankedDailySavings > 0) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.savings, size: 14, color: Colors.green.shade400),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Banked from previous days: ${NumberFormat.currency(symbol: '₹', decimalDigits: 0).format(bankedDailySavings)}',
+                      style: TextStyle(
+                          color: Colors.green.shade400, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),

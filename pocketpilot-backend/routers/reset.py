@@ -125,6 +125,8 @@ async def confirm_reset(payload: ResetConfirmPayload, current_user: CurrentUser)
             "$set": {
                 "lifetime_savings": new_lifetime_savings,
                 "last_reset_date": now,
+                "banked_daily_savings": 0.0,
+                "last_rollover_date": now,
                 "updated_at": now,
             },
             # Clear the starting-balance override on reset: the fresh cycle

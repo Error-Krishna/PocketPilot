@@ -26,6 +26,19 @@ class UserBase(BaseModel):
     # the moment a non-SMS transaction happens.
     last_known_bank_balance: Optional[float] = None
     last_known_bank_balance_at: Optional[datetime] = None
+    # Daily-rollover state (see routers/budget.py _apply_daily_rollover).
+    # last_rollover_date tracks which calendar day the stored daily figures
+    # are for, so a lazy check on each request can detect "it's a new day"
+    # without needing a cron job. banked_daily_savings accumulates each
+    # day's genuinely unused flat allowance once midnight passes for it —
+    # separate from lifetime_savings, which only grows at cycle reset.
+    last_rollover_date: Optional[datetime] = None
+    banked_daily_savings: float = Field(0, ge=0)
+    # Cumulative reduction applied to the flat daily_limit for the rest of
+    # the current cycle, from resolving "this purchase went over today's
+    # limit" decisions where the user chose to reduce future days rather
+    # than draw from savings. Reset to 0 at cycle reset (see routers/reset.py).
+    daily_limit_adjustment: float = Field(0, ge=0)
 
 
 class UserCreate(UserBase):

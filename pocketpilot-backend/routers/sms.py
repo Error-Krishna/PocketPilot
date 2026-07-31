@@ -11,6 +11,7 @@ from core.classifier import ClassificationInput, classify, is_confident
 from core.database import get_database
 from core.responses import error_response, success_response
 from models.transaction import ClassificationSource, TransactionClass
+from routers.budget import _cycle_bounds, _sum_discretionary_spend
 
 router = APIRouter(prefix="/sms", tags=["sms"])
 
@@ -193,6 +194,38 @@ async def sync_sms_transactions(payload: SmsSyncPayload, current_user: CurrentUs
             "created_at": now,
             "updated_at": now,
         }
+
+        # Same-day overage detection: only meaningful for discretionary
+        # spend today specifically — a backdated SMS, a credit, or a
+        # fixed/transfer/exception transaction shouldn't trigger the "you
+        # went over today's limit" alert, since those either don't count
+        # against daily math at all or aren't actually today.
+        is_today = txn.timestamp.date() == now.date()
+        if (
+            not txn.is_credit
+            and result.txn_class == TransactionClass.DISCRETIONARY
+            and is_today
+        ):
+            daily_limit = await _compute_current_daily_limit(db, user)
+            if daily_limit is not None:
+                day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                day_end = day_start + timedelta(days=1)
+                today_so_far = await db.transactions.find(
+                    {
+                        "user_id": user_id,
+                        "date": {"$gte": day_start, "$lt": day_end},
+                    }
+                ).to_list(length=None)
+                # today_so_far already includes this transaction (about to be
+                # inserted below, but the query runs before insert — add its
+                # amount manually so the check reflects the true post-insert
+                # total without a second round-trip).
+                spent_today_with_this = (
+                    max(0.0, _sum_discretionary_spend(today_so_far)) + txn.amount
+                )
+                if spent_today_with_this > daily_limit:
+                    doc["overage_pending"] = True
+
         if fingerprint:
             doc["sms_fingerprint"] = fingerprint
         if txn.raw_sms:
@@ -255,3 +288,36 @@ async def sync_sms_transactions(payload: SmsSyncPayload, current_user: CurrentUs
             "reset_candidate_transaction_id": reset_candidate_transaction_id,
         }
     )
+
+
+async def _compute_current_daily_limit(db, user: dict) -> float | None:
+    """Recomputes today's flat daily_limit exactly as routers/budget.py
+    does, for the overage check above. Kept here rather than importing
+    get_budget_summary directly since that endpoint does much more work
+    (full transaction fetch, rollover side effects) than this narrow check
+    needs — duplicating just the formula, sourced from the same
+    _cycle_bounds helper, keeps the two definitions from silently drifting
+    apart while avoiding an expensive extra summary computation per SMS.
+    """
+    monthly_budget = float(user.get("monthly_budget") or 0)
+    cycle_starting_balance = user.get("cycle_starting_balance")
+    cycle_base_amount = (
+        float(cycle_starting_balance) if cycle_starting_balance is not None else monthly_budget
+    )
+    if cycle_base_amount <= 0:
+        return None
+
+    budget_reset_raw = user.get("budget_reset_date")
+    account_created_at = user.get("created_at") or datetime.now(timezone.utc)
+    last_reset_date = user.get("last_reset_date")
+    now = datetime.now(timezone.utc)
+    cycle_start, next_reset_date = _cycle_bounds(
+        budget_reset_raw, last_reset_date, account_created_at, now
+    )
+
+    remaining_days = max(1, (next_reset_date.date() - now.date()).days)
+    days_elapsed = max(1, (now.date() - cycle_start.date()).days + 1)
+    total_cycle_days = days_elapsed + remaining_days
+    daily_limit_base = cycle_base_amount / total_cycle_days if total_cycle_days else 0.0
+    daily_limit_adjustment = float(user.get("daily_limit_adjustment") or 0)
+    return max(0.0, daily_limit_base - daily_limit_adjustment)

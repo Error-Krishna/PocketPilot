@@ -368,6 +368,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   dailyLimit: summary.dailyLimit,
                   savedToday: summary.savedToday,
                   incomeToday: summary.incomeToday, // required
+                  bankedDailySavings: summary.bankedDailySavings,
                   isAwaitingFunds: summary.isAwaitingFunds,
                 ),
                 const SizedBox(height: 16),

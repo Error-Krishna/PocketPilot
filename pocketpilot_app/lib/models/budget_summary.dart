@@ -19,6 +19,7 @@ class BudgetSummary {
   final DateTime? cycleEnd;
   final bool isAwaitingFunds;
   final double? cycleStartingBalance;
+  final double bankedDailySavings;
   final double? lastKnownBankBalance;
   final DateTime? lastKnownBankBalanceAt;
 
@@ -43,6 +44,7 @@ class BudgetSummary {
     this.cycleEnd,
     this.isAwaitingFunds = false,
     this.cycleStartingBalance,
+    this.bankedDailySavings = 0,
     this.lastKnownBankBalance,
     this.lastKnownBankBalanceAt,
   });
@@ -88,6 +90,7 @@ class BudgetSummary {
         cycleStartingBalance: json['cycleStartingBalance'] != null
             ? (json['cycleStartingBalance'] as num).toDouble()
             : null,
+        bankedDailySavings: _num(json, 'bankedDailySavings'),
         lastKnownBankBalance: json['lastKnownBankBalance'] != null
             ? (json['lastKnownBankBalance'] as num).toDouble()
             : null,

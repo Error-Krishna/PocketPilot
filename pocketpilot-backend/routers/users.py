@@ -40,6 +40,8 @@ def _serialize_user(doc: dict) -> dict:
         cycle_starting_balance=doc.get("cycle_starting_balance"),
         last_known_bank_balance=doc.get("last_known_bank_balance"),
         last_known_bank_balance_at=doc.get("last_known_bank_balance_at"),
+        last_rollover_date=doc.get("last_rollover_date"),
+        banked_daily_savings=doc.get("banked_daily_savings", 0),
         created_at=doc["created_at"],
         updated_at=doc["updated_at"],
     ).model_dump()
