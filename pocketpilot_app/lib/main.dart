@@ -130,6 +130,9 @@ class _AppRouterState extends State<_AppRouter> {
               transactions:
                   (extra?['transactions'] as List<Transaction>?) ?? const [],
               total: (extra?['total'] as double?) ?? 0,
+              accountsById: (extra?['accountsById']
+                      as Map<String, BankAccount>?) ??
+                  const {},
             );
           },
         ),

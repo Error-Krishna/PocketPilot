@@ -30,6 +30,7 @@ def _serialize_transaction(doc: dict) -> dict:
         classification_confidence=doc.get("classification_confidence", 1.0),
         account_id=doc.get("account_id"),
         raw_sms=doc.get("raw_sms"),
+        classification_rule=doc.get("classification_rule"),
     ).model_dump()
 
 

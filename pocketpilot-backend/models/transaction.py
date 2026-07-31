@@ -62,6 +62,11 @@ class TransactionBase(BaseModel):
     # Surfaced in the transaction detail view so the user can see exactly
     # what the bank actually said, not just our parsed interpretation.
     raw_sms: Optional[str] = None
+    # Which specific rule/keyword the classifier matched to reach its
+    # decision (e.g. "discretionary_kw:swiggy") — surfaced on the detail
+    # screen as "why was this classified this way", so a wrong guess is
+    # obvious and explainable rather than a silent black box.
+    classification_rule: Optional[str] = None
 
 
 class TransactionCreate(TransactionBase):

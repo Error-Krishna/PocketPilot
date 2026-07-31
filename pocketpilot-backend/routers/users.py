@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, Field
 from pymongo import ReturnDocument
 
 from core.auth import CurrentUser
@@ -10,6 +11,19 @@ from core.responses import error_response, success_response
 from models.user import UserResponse, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+class BankBalanceConfirm(BaseModel):
+    # If the user just confirms the existing figure is accurate, the
+    # frontend can omit corrected_balance and only send confirmed=true —
+    # this simply refreshes last_known_bank_balance_at without changing
+    # the number.
+    confirmed: bool
+    corrected_balance: float | None = Field(None, ge=0)
+    # Whether the corrected figure should also become this cycle's actual
+    # starting balance (i.e. affect budget math), not just the
+    # informational reference number. Ignored if corrected_balance is None.
+    apply_to_cycle: bool = False
 
 
 def _serialize_user(doc: dict) -> dict:
@@ -62,6 +76,41 @@ async def update_current_user_profile(payload: UserUpdate, current_user: Current
     return success_response(_serialize_user(result))
 
 
+@router.post("/me/bank-balance")
+async def confirm_or_correct_bank_balance(
+    payload: BankBalanceConfirm, current_user: CurrentUser
+):
+    """User reviews the informational bank-balance figure (opportunistically
+    parsed from SMS — see routers/sms.py) and either confirms it's accurate
+    or corrects it. A correction always updates the display figure; the
+    user separately opts in to also using it as this cycle's real starting
+    point for budget math via apply_to_cycle, since those are genuinely
+    different actions (see cycle_starting_balance docs in models/user.py).
+    """
+    db = get_database()
+    now = datetime.now(timezone.utc)
+    updates: dict = {"updated_at": now}
+
+    if payload.corrected_balance is not None:
+        updates["last_known_bank_balance"] = payload.corrected_balance
+        updates["last_known_bank_balance_at"] = now
+        if payload.apply_to_cycle:
+            updates["cycle_starting_balance"] = payload.corrected_balance
+    else:
+        # Pure confirmation, no number change — still worth bumping the
+        # timestamp so the user can see "confirmed as of just now".
+        updates["last_known_bank_balance_at"] = now
+
+    result = await db.users.find_one_and_update(
+        {"firebase_uid": current_user["uid"]},
+        {"$set": updates},
+        return_document=ReturnDocument.AFTER,
+    )
+    if not result:
+        return error_response("User not found")
+    return success_response(_serialize_user(result))
+
+
 @router.post("/register", status_code=status.HTTP_201_CREATED)  # added status code
 async def register_user(current_user: CurrentUser):
     db = get_database()
@@ -76,8 +125,14 @@ async def register_user(current_user: CurrentUser):
         "email": current_user.get("email", ""),
         "display_name": current_user.get("name") or current_user.get("email", "Student"),
         "phone": None,
-        "monthly_budget": 0.0,
-        "budget_reset_date": 1,
+        "monthly_budget": None,
+        # Genuinely unset, not defaulted to day 1 — budget_reset_date is
+        # optional by design (see routers/budget.py _cycle_bounds and the
+        # onboarding flow), so a new user who hasn't chosen a reset day yet
+        # correctly falls back to pocket-money-match auto-detection instead
+        # of silently being locked to a reset date they never picked.
+        "budget_reset_date": None,
+        "lifetime_savings": 0.0,
         "created_at": now,
         "updated_at": now,
     }

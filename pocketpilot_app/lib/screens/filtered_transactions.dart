@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/transaction.dart';
+import '../models/bank_account.dart';
 import '../widgets/transaction_tile.dart';
 
 /// Drill-down list for a specific slice of transactions (e.g. "everything
@@ -10,12 +11,14 @@ class FilteredTransactionsScreen extends StatelessWidget {
   final String title;
   final List<Transaction> transactions;
   final double total;
+  final Map<String, BankAccount> accountsById;
 
   const FilteredTransactionsScreen({
     super.key,
     required this.title,
     required this.transactions,
     required this.total,
+    this.accountsById = const {},
   });
 
   @override
@@ -53,6 +56,9 @@ class FilteredTransactionsScreen extends StatelessWidget {
                     itemCount: transactions.length,
                     itemBuilder: (_, i) => TransactionTile(
                       transaction: transactions[i],
+                      account: transactions[i].accountId != null
+                          ? accountsById[transactions[i].accountId]
+                          : null,
                       onDelete: null, // Read-only drill-down; edit from Transactions tab
                     ),
                   ),

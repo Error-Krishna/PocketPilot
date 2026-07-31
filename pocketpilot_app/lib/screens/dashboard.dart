@@ -60,6 +60,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final historyFuture = api
         .getResetHistory()
         .catchError((_) => (<MonthlyArchive>[], 0.0));
+    final bankAccountsFuture =
+        api.getBankAccounts().catchError((_) => <BankAccount>[]);
 
     _combinedFuture = Future.wait([
       summaryFuture,
@@ -69,6 +71,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       reviewCountFuture,
       trendFuture,
       historyFuture,
+      bankAccountsFuture,
     ]).then((results) {
       // Fire the daily-limit notification once per real data load,
       // not on every widget rebuild.
@@ -313,6 +316,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             final history = historyResult.$1;
             final lifetimeSavings = historyResult.$2;
             final lastCycle = history.isNotEmpty ? history.first : null;
+            final bankAccounts = snapshot.data![7] as List<BankAccount>;
+            final accountsById = {for (final a in bankAccounts) a.id: a};
 
             final totalSavings =
                 goals.fold<double>(0.0, (sum, g) => sum + g.currentAmount);
@@ -387,6 +392,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       'title': 'Spent This Month',
                       'transactions': spendThisCycle,
                       'total': summary.spentThisMonth,
+                      'accountsById': accountsById,
                     });
                   },
                 ),
@@ -442,6 +448,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 ...transactions.take(5).map((tx) => TransactionTile(
                       transaction: tx,
+                      account:
+                          tx.accountId != null ? accountsById[tx.accountId] : null,
                       onDelete: () async {
                         await api.deleteTransaction(tx.id);
                         setState(_loadData);

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../widgets/transaction_tile.dart';
 import '../models/transaction.dart';
+import '../models/bank_account.dart';
 
 class TransactionsScreen extends StatefulWidget {
   const TransactionsScreen({super.key});
@@ -15,6 +16,7 @@ class TransactionsScreen extends StatefulWidget {
 
 class _TransactionsScreenState extends State<TransactionsScreen> {
   Future<List<Transaction>>? _future;
+  Map<String, BankAccount> _accountsById = {};
   final _formKey = GlobalKey<FormState>();
   final _amountCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
@@ -25,7 +27,20 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   DateTime? _selectedDate;
 
   void _load() {
-    final future = context.read<ApiService>().getTransactions();
+    final api = context.read<ApiService>();
+    final future = api.getTransactions();
+
+    // Fetch accounts alongside so each TransactionTile/detail screen can
+    // show which bank the transaction is tagged to, matching the same
+    // lookup the dashboard needs (see dashboard.dart _loadData).
+    api.getBankAccounts().then((accounts) {
+      if (!mounted) return;
+      setState(() {
+        _accountsById = {for (final a in accounts) a.id: a};
+      });
+    }).catchError((_) {
+      // Non-fatal — tiles just show without an account tag.
+    });
 
     if (!mounted) return;
 
@@ -251,6 +266,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                           ...entry.value.map(
                             (txn) => TransactionTile(
                               transaction: txn,
+                              account: txn.accountId != null
+                                  ? _accountsById[txn.accountId]
+                                  : null,
                               onDelete: () async {
                                 await api.deleteTransaction(txn.id);
                                 _load();

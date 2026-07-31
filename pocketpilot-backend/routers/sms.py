@@ -187,6 +187,7 @@ async def sync_sms_transactions(payload: SmsSyncPayload, current_user: CurrentUs
             "txn_class": result.txn_class.value,
             "classification_source": result.source.value,
             "classification_confidence": result.confidence,
+            "classification_rule": result.matched_rule,
             "account_id": _match_account(txn.raw_sms, bank_accounts),
             "date": txn.timestamp,
             "created_at": now,

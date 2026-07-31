@@ -35,6 +35,9 @@ def _serialize_transaction(doc: dict) -> dict:
             "classification_source", ClassificationSource.PENDING.value
         ),
         classification_confidence=doc.get("classification_confidence", 0.0),
+        account_id=doc.get("account_id"),
+        raw_sms=doc.get("raw_sms"),
+        classification_rule=doc.get("classification_rule"),
     ).model_dump()
 
 
@@ -91,7 +94,16 @@ async def confirm_classification(
                 "classification_source": ClassificationSource.USER.value,
                 "classification_confidence": 1.0,
                 "updated_at": now,
-            }
+            },
+            # Clear the old auto-classifier's matched_rule — otherwise the
+            # "why was this classified this way" explanation on the detail
+            # screen would keep showing the ORIGINAL rule-based reasoning
+            # even after the user manually overrides it, which is
+            # misleading. classification_source now being USER means
+            # Transaction.classificationExplanation shows "You confirmed
+            # this classification" instead, so classification_rule is no
+            # longer meaningful to keep around.
+            "$unset": {"classification_rule": ""},
         },
         return_document=ReturnDocument.AFTER,
     )

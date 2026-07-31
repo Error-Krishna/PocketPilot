@@ -98,6 +98,7 @@ class _SmsPermissionScreenState extends State<SmsPermissionScreen> {
           'source': 'sms',
           'raw_sms': parsed.rawSms,
           'sms_fingerprint': parsed.fingerprint,
+          'is_credit': parsed.isCredit,
         },
       ]);
       if (!mounted) return;
