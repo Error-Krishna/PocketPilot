@@ -161,6 +161,7 @@ class Transaction {
   final double classificationConfidence;
   final String? accountId;
   final String? rawSms;
+  final String? classificationRule;
 
   Transaction({
     required this.id,
@@ -178,9 +179,55 @@ class Transaction {
     this.classificationConfidence = 1.0,
     this.accountId,
     this.rawSms,
+    this.classificationRule,
   });
 
   bool get needsReview => classificationSource == ClassificationSource.pending;
+
+  /// Human-readable explanation of why the classifier reached its
+  /// decision, derived from the raw rule code (e.g. "discretionary_kw:
+  /// swiggy"). Falls back to a generic note for manual entries or when no
+  /// rule was recorded (older transactions predate this field).
+  String get classificationExplanation {
+    final rule = classificationRule;
+    if (classificationSource == ClassificationSource.user) {
+      return 'You confirmed this classification.';
+    }
+    if (rule == null) {
+      return 'No detailed reason recorded for this transaction.';
+    }
+    final parts = rule.split(':');
+    final kind = parts[0];
+    final matched = parts.length > 1 ? parts[1] : null;
+
+    switch (kind) {
+      case 'autopay_name':
+        return 'Matched your autopay named "$matched".';
+      case 'self_account':
+        return 'Matched your registered account "$matched".';
+      case 'income_kw':
+        return 'Detected the income keyword "$matched" in the SMS.';
+      case 'refund_kw':
+        return 'Detected the refund keyword "$matched" in the SMS.';
+      case 'fixed_kw':
+        return 'Detected the keyword "$matched", suggesting a recurring bill or subscription.';
+      case 'transfer_kw':
+        return 'Detected the keyword "$matched", suggesting a transfer between your own accounts.';
+      case 'exception_kw':
+        return 'Detected the keyword "$matched", suggesting an emergency or one-time expense.';
+      case 'discretionary_kw':
+        return 'Matched merchant keyword "$matched".';
+      case 'no_text_income_default':
+        return 'No SMS text available — defaulted to income since you marked it a credit.';
+      case 'no_text_expense_default':
+        return 'No SMS text available — defaulted to discretionary spend.';
+      case 'fallback_income_unclassified':
+      case 'fallback_expense_unclassified':
+        return 'No confident match found — flagged for your review.';
+      default:
+        return 'Classified using rule: $rule';
+    }
+  }
 
   factory Transaction.fromJson(Map<String, dynamic> json) => Transaction(
         id: json['id'],
@@ -200,6 +247,7 @@ class Transaction {
             (json['classification_confidence'] as num?)?.toDouble() ?? 1.0,
         accountId: json['account_id'],
         rawSms: json['raw_sms'],
+        classificationRule: json['classification_rule'],
       );
 }
 

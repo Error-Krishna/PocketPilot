@@ -8,7 +8,7 @@ import '../models/bank_account.dart';
 import '../services/api_service.dart';
 import '../widgets/transaction_tile.dart';
 
-class TransactionDetailScreen extends StatelessWidget {
+class TransactionDetailScreen extends StatefulWidget {
   final Transaction transaction;
   final BankAccount? account;
 
@@ -19,7 +19,71 @@ class TransactionDetailScreen extends StatelessWidget {
   });
 
   @override
+  State<TransactionDetailScreen> createState() =>
+      _TransactionDetailScreenState();
+}
+
+class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
+  late Transaction _transaction;
+
+  @override
+  void initState() {
+    super.initState();
+    _transaction = widget.transaction;
+  }
+
+  Future<void> _showEditClassificationSheet() async {
+    final selected = await showModalBottomSheet<TransactionClass>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'What kind of transaction is this?',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
+            ...TransactionClass.values.map(
+              (cls) => ListTile(
+                leading: Icon(Icons.circle, size: 12, color: classColor(cls)),
+                title: Text(cls.label),
+                trailing: _transaction.txnClass == cls
+                    ? const Icon(Icons.check, color: Colors.green)
+                    : null,
+                onTap: () => Navigator.pop(sheetContext, cls),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (selected == null || selected == _transaction.txnClass || !mounted) return;
+
+    try {
+      final api = context.read<ApiService>();
+      final updated =
+          await api.confirmClassification(_transaction.id, selected);
+      if (!mounted) return;
+      setState(() => _transaction = updated);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Updated to "${selected.label}"')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update: $e')),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final transaction = _transaction;
+    final account = widget.account;
     final isExpense = transaction.type == TransactionType.expense;
     final currency = NumberFormat.currency(symbol: '₹', decimalDigits: 0);
     final color = isExpense ? const Color(0xFFEF4444) : const Color(0xFF22C55E);
@@ -117,11 +181,41 @@ class TransactionDetailScreen extends StatelessWidget {
                 value: transaction.source == 'sms' ? 'Detected from SMS' : 'Manually added',
               ),
               if (account != null)
-                _DetailRow(label: 'Account', value: account!.displayName),
+                _DetailRow(label: 'Account', value: account.displayName),
               if (transaction.description != null &&
                   transaction.description!.isNotEmpty)
                 _DetailRow(label: 'Note', value: transaction.description!),
             ],
+          ),
+
+          const SizedBox(height: 20),
+          const Text(
+            'WHY THIS CLASSIFICATION',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    transaction.classificationExplanation,
+                    style: const TextStyle(fontSize: 13, height: 1.4),
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: OutlinedButton.icon(
+                      onPressed: _showEditClassificationSheet,
+                      icon: const Icon(Icons.edit, size: 16),
+                      label: const Text('Change classification'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
 
           if (transaction.rawSms != null && transaction.rawSms!.isNotEmpty) ...[

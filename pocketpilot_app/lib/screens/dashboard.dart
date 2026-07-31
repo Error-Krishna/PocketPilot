@@ -329,6 +329,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   remainingDays: summary.remainingDays,
                   lastKnownBankBalance: summary.lastKnownBankBalance,
                   lastKnownBankBalanceAt: summary.lastKnownBankBalanceAt,
+                  onBankBalanceReviewed:
+                      (confirmed, correctedBalance, applyToCycle) async {
+                    try {
+                      await api.confirmOrCorrectBankBalance(
+                        confirmed: confirmed,
+                        correctedBalance: correctedBalance,
+                        applyToCycle: applyToCycle,
+                      );
+                      setState(_loadData);
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            confirmed
+                                ? 'Thanks for confirming!'
+                                : applyToCycle
+                                    ? 'Balance updated and applied to this cycle.'
+                                    : 'Balance updated.',
+                          ),
+                        ),
+                      );
+                    } catch (e) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to update: $e')),
+                      );
+                    }
+                  },
                 ),
                 const SizedBox(height: 16),
                 DailyLimitCard(

@@ -337,4 +337,28 @@ class ApiService {
   Future<void> deleteBankAccount(String id) async {
     await _dio.delete('/bank-accounts/$id');
   }
+
+  /// User confirms the informational bank-balance figure is accurate, or
+  /// corrects it. [applyToCycle] additionally makes the corrected figure
+  /// this cycle's real starting balance for budget math (see
+  /// cycle_starting_balance docs backend-side) — opt-in, since confirming
+  /// display accuracy and changing the actual math are different actions.
+  Future<User> confirmOrCorrectBankBalance({
+    required bool confirmed,
+    double? correctedBalance,
+    bool applyToCycle = false,
+  }) async {
+    final res = await _dio.post(
+      '/users/me/bank-balance',
+      data: {
+        'confirmed': confirmed,
+        if (correctedBalance != null) 'corrected_balance': correctedBalance,
+        'apply_to_cycle': applyToCycle,
+      },
+    );
+    if (res.data['success'] == true) {
+      return User.fromJson(res.data['data']);
+    }
+    throw Exception('Failed to update bank balance');
+  }
 }
