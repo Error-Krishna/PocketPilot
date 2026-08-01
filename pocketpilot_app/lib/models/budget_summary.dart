@@ -20,6 +20,7 @@ class BudgetSummary {
   final bool isAwaitingFunds;
   final double? cycleStartingBalance;
   final double bankedDailySavings;
+  final List<String> pendingOverageTransactionIds;
   final double? lastKnownBankBalance;
   final DateTime? lastKnownBankBalanceAt;
 
@@ -45,6 +46,7 @@ class BudgetSummary {
     this.isAwaitingFunds = false,
     this.cycleStartingBalance,
     this.bankedDailySavings = 0,
+    this.pendingOverageTransactionIds = const [],
     this.lastKnownBankBalance,
     this.lastKnownBankBalanceAt,
   });
@@ -91,6 +93,9 @@ class BudgetSummary {
             ? (json['cycleStartingBalance'] as num).toDouble()
             : null,
         bankedDailySavings: _num(json, 'bankedDailySavings'),
+        pendingOverageTransactionIds: json['pendingOverageTransactionIds'] != null
+            ? List<String>.from(json['pendingOverageTransactionIds'])
+            : const [],
         lastKnownBankBalance: json['lastKnownBankBalance'] != null
             ? (json['lastKnownBankBalance'] as num).toDouble()
             : null,

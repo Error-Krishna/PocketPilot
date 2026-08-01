@@ -20,6 +20,7 @@ import '../models/spend_trend.dart';
 import '../models/user.dart';
 import '../services/sms_parser_service.dart';
 import '../services/notification_service.dart';
+import '../widgets/overage_resolution_dialog.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -33,6 +34,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   StreamSubscription<ParsedTransaction>? _smsSubscription;
   Timer? _syncTimer;
   int _trendDays = 7;
+  // Prevents re-showing the overage dialog for a transaction already
+  // being prompted in this session (e.g. summary reload happening while
+  // the dialog from the live sync callback is still open).
+  final Set<String> _overagePromptsShown = {};
 
   late Future<List<dynamic>> _combinedFuture;
 
@@ -83,9 +88,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
           savedToday: summary.savedToday,
           isAwaitingFunds: summary.isAwaitingFunds,
         );
+
+        // Catch up on any overage still awaiting a decision — covers the
+        // case where the app was closed when the triggering SMS arrived,
+        // so the live-sync-callback prompt (below) never had a chance to
+        // fire.
+        final transactions = results[1] as List<Transaction>;
+        for (final id in summary.pendingOverageTransactionIds) {
+          if (_overagePromptsShown.contains(id)) continue;
+          final txn = transactions.where((t) => t.id == id).firstOrNull;
+          if (txn == null) continue;
+          _overagePromptsShown.add(id);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _showOverageDialog(id, txn.amount, txn.merchant);
+          });
+        }
       }
       return results;
     });
+  }
+
+  void _showOverageDialog(String transactionId, double amount, String? merchant) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => OverageResolutionDialog(
+        transactionId: transactionId,
+        amount: amount,
+        merchant: merchant,
+      ),
+    ).then((_) => setState(_loadData));
   }
 
   void _onTrendRangeChanged(int days) {
@@ -147,6 +179,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             if (resetCandidateId != null && mounted) {
               await _promptResetConfirmation(resetCandidateId, txn.amount);
             }
+
+            // If this specific transaction pushed today over the limit,
+            // the backend will have marked it overage_pending — the next
+            // summary reload (triggered above when inserted > 0) surfaces
+            // it via pendingOverageTransactionIds, so no separate check is
+            // needed here beyond letting _loadData's callback handle it.
           } catch (e) {
             debugPrint('SMS dashboard sync error: $e');
           }

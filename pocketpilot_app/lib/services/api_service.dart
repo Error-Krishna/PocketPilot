@@ -361,4 +361,46 @@ class ApiService {
     }
     throw Exception('Failed to update bank balance');
   }
+
+  /// Live preview for the "you went over today's limit" alert. Call again
+  /// on every slider move — nothing is persisted until [resolveOverage].
+  Future<Map<String, dynamic>> previewOverageResolution(
+    String transactionId, {
+    double amountFromSavings = 0,
+  }) async {
+    final res = await _dio.get(
+      '/budget/overage/preview',
+      queryParameters: {
+        'transaction_id': transactionId,
+        'amount_from_savings': amountFromSavings,
+      },
+    );
+    if (res.data['success'] == true) {
+      return res.data['data'] as Map<String, dynamic>;
+    }
+    throw Exception('Failed to preview overage resolution');
+  }
+
+  /// Commits how a same-day overage is absorbed: 'exception' reclassifies
+  /// the transaction as a one-time exception; 'savings' draws entirely
+  /// from banked savings; 'reduce_daily' spreads it across remaining
+  /// cycle days; 'hybrid' splits by [amountFromSavings].
+  Future<Map<String, dynamic>> resolveOverage(
+    String transactionId,
+    String resolution, {
+    double amountFromSavings = 0,
+  }) async {
+    final res = await _dio.post(
+      '/budget/overage/resolve',
+      data: {
+        'transaction_id': transactionId,
+        'resolution': resolution,
+        'amount_from_savings': amountFromSavings,
+      },
+    );
+    if (res.data['success'] == true) {
+      return res.data['data'] as Map<String, dynamic>;
+    }
+    throw Exception('Failed to resolve overage');
+  }
 }

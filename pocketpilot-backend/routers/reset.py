@@ -127,6 +127,7 @@ async def confirm_reset(payload: ResetConfirmPayload, current_user: CurrentUser)
                 "last_reset_date": now,
                 "banked_daily_savings": 0.0,
                 "last_rollover_date": now,
+                "daily_limit_adjustment": 0.0,
                 "updated_at": now,
             },
             # Clear the starting-balance override on reset: the fresh cycle
